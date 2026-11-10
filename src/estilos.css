@@ -44,6 +44,43 @@
 body {
   margin: 0;
   background: var(--fundo);
+  /* Acabamento de app: textos da interface não são selecionáveis nem arrastáveis;
+     só os campos (input, textarea, editor de texto rico) aceitam seleção. */
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+img,
+svg,
+a {
+  -webkit-user-drag: none;
+}
+input,
+textarea,
+select,
+[contenteditable="true"],
+[contenteditable="true"] * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+input,
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+button,
+select,
+summary,
+label[for],
+[role="separator"] {
+  cursor: pointer;
+}
+[role="separator"] {
+  cursor: col-resize;
 }
 
 h1,
