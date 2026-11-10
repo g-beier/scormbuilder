@@ -1,6 +1,9 @@
 /**
- * Faixa de telas (acima da prévia): cards numerados numa linha que rola na horizontal,
- * reordenáveis por arrasto ou teclado. Pode ser recolhida para uma barra fina.
+ * Faixa de telas (acima da prévia): cards numerados numa linha que rola na horizontal.
+ * - Teclado: a faixa é uma parada só no Tab (roving tabindex); ←/→, Home/End movem o
+ *   foco entre os cards; Enter/Espaço selecionam; Alt + ←/→ mudam a tela de posição.
+ * - Mudar a ordem: arrastar o card (ponteiro) ou os botões ← → do card selecionado.
+ * - Pode ser recolhida para uma barra fina.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
@@ -12,8 +15,8 @@ import { confirmar } from "../servicos/dialogos";
 import { Icone } from "./Icones";
 import { anuncios, soHorizontal, useSensoresOrdenaveis } from "./ordenavel";
 
-/** Dica de reordenar, no título do card e para leitores de tela. */
-const DICA_MOVER = "Para mudar a posição, arraste o card ou use Alt + seta para a esquerda ou para a direita.";
+const DICA_MOVER = "Para mudar a ordem, arraste o card ou use as setas ← → da tela selecionada.";
+const ATALHO_DESFAZER = /Mac|iPhone|iPad/.test(typeof navigator === "undefined" ? "" : navigator.platform) ? "⌘Z" : "Ctrl+Z";
 
 export interface PropsListaSlides {
   slides: Slide[];
@@ -24,11 +27,15 @@ export interface PropsListaSlides {
   aoAlternarPrevia(): void;
 }
 
+const focarCard = (id: string) =>
+  requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-slide="${id}"] .slide-botao`)?.focus());
+
 export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRecolhida, aoAlternarPrevia }: PropsListaSlides) {
   const corpoId = useId();
+  const dicaId = useId();
   const faixaRef = useRef<HTMLOListElement>(null);
   const selecionado = useProjeto((s) => s.slideSelecionadoId);
-  const { moverSlide, adicionarSlide } = useProjeto.getState();
+  const { moverSlide, adicionarSlide, selecionarSlide, duplicarSlide } = useProjeto.getState();
   const sensores = useSensoresOrdenaveis(true);
   const pos = (id: string) => slides.findIndex((s) => s.id === id);
   const nome = (id: string) => {
@@ -38,19 +45,13 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
   const temCapa = slides.some((s) => s.tipo === "capa");
   const temFim = slides.some((s) => s.tipo === "fim");
   const iSel = pos(selecionado ?? "");
+  // Card que recebe o Tab: o selecionado (ou o primeiro)
+  const iTab = iSel >= 0 ? iSel : 0;
   const [anuncio, setAnuncio] = useState("");
 
-  // Alt + ←/→ no card: troca com o vizinho; o foco acompanha o card
-  function moverComTeclado(i: number, dir: -1 | 1) {
-    const para = i + dir;
-    if (para < 0 || para >= slides.length) return;
-    const id = slides[i].id;
-    moverSlide(i, para);
+  function anunciar(t: string) {
     setAnuncio("");
-    requestAnimationFrame(() => {
-      setAnuncio(`Tela movida para a posição ${para + 1} de ${slides.length}.`);
-      document.querySelector<HTMLElement>(`[data-slide="${id}"] .slide-botao`)?.focus();
-    });
+    requestAnimationFrame(() => setAnuncio(t));
   }
 
   // O card selecionado fica sempre visível na faixa
@@ -61,7 +62,7 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
       ?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [selecionado, recolhida, slides.length]);
 
-  // Roda do mouse na vertical rola a faixa na horizontal
+  // Roda do mouse na vertical rola a faixa na horizontal (só com o ponteiro sobre ela)
   useEffect(() => {
     const ol = faixaRef.current;
     if (!ol) return;
@@ -76,12 +77,53 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
 
   function aoSoltar({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return;
-    moverSlide(pos(String(active.id)), pos(String(over.id)));
+    const para = pos(String(over.id));
+    moverSlide(pos(String(active.id)), para);
+    anunciar(`Tela movida para a posição ${para + 1} de ${slides.length}.`);
+  }
+
+  /** Troca a tela i com a vizinha; o foco fica no card ou no botão usado. */
+  function mover(i: number, dir: -1 | 1, focoEm?: string) {
+    const para = i + dir;
+    if (para < 0 || para >= slides.length) return;
+    const id = slides[i].id;
+    moverSlide(i, para);
+    anunciar(`Tela movida para a posição ${para + 1} de ${slides.length}.`);
+    requestAnimationFrame(() => {
+      const card = document.querySelector<HTMLElement>(`[data-slide="${id}"]`);
+      const alvo = (focoEm && card?.querySelector<HTMLElement>(focoEm)) || card?.querySelector<HTMLElement>(".slide-botao");
+      alvo?.focus();
+    });
+  }
+
+  function duplicar(i: number) {
+    const id = duplicarSlide(slides[i].id);
+    if (!id) return;
+    selecionarSlide(id);
+    anunciar(`Tela duplicada: a cópia é a tela ${i + 2}.`);
+    focarCard(id);
+  }
+
+  // Setas movem o foco entre os cards (sem Alt) ou mudam a tela de posição (com Alt)
+  function teclaCard(e: KeyboardEvent<HTMLButtonElement>, i: number) {
+    const alvos: Record<string, number> = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: slides.length - 1 };
+    if (!(e.key in alvos)) return;
+    e.preventDefault();
+    if (e.altKey) {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") mover(i, e.key === "ArrowLeft" ? -1 : 1);
+      return;
+    }
+    const j = Math.max(0, Math.min(slides.length - 1, alvos[e.key]));
+    // Foco na hora (não no próximo frame): setas rápidas seguem de card em card
+    const alvo = document.querySelector<HTMLElement>(`[data-slide="${slides[j].id}"] .slide-botao`);
+    alvo?.focus();
+    alvo?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
 
   function nova(tipo: Slide["tipo"]) {
     const id = adicionarSlide(tipo);
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-slide="${id}"] .slide-botao`)?.focus());
+    anunciar(`${tipo === "capa" ? "Capa criada" : tipo === "fim" ? "Tela de fim criada" : "Nova tela criada"}.`);
+    focarCard(id);
   }
 
   return (
@@ -90,10 +132,9 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
         <button
           type="button"
           className="btn-icone"
-          aria-expanded={!recolhida}
           aria-controls={corpoId}
           aria-label={recolhida ? "Mostrar telas" : "Esconder telas"}
-          title={recolhida ? "Mostrar telas" : "Esconder telas"}
+          title={recolhida ? "Mostrar telas" : "Esconder telas (a prévia ganha a altura)"}
           onClick={aoAlternar}
         >
           <Icone nome={recolhida ? "seta" : "seta-cima"} />
@@ -101,9 +142,15 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
         <h2 className="coluna-titulo" tabIndex={-1}>
           Telas <span className="faixa-total">({slides.length})</span>
         </h2>
-        {recolhida && iSel >= 0 && (
-          <span className="faixa-atual">
-            Tela {iSel + 1}: {tituloCurto(slides[iSel])}
+        {recolhida ? (
+          iSel >= 0 && (
+            <span className="faixa-atual">
+              Tela {iSel + 1}: {tituloCurto(slides[iSel])}
+            </span>
+          )
+        ) : (
+          <span id={dicaId} className="ajuda faixa-dica">
+            {DICA_MOVER}
           </span>
         )}
         {previaRecolhida && (
@@ -124,7 +171,7 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
           }}
         >
           <SortableContext items={slides.map((s) => s.id)} strategy={horizontalListSortingStrategy}>
-            <ol className="slides" ref={faixaRef}>
+            <ol className="slides" ref={faixaRef} aria-describedby={dicaId}>
               {slides.map((s, i) => (
                 <ItemSlide
                   key={s.id}
@@ -132,8 +179,11 @@ export function ListaSlides({ slides, problemas, recolhida, aoAlternar, previaRe
                   indice={i}
                   total={slides.length}
                   selecionado={s.id === selecionado}
+                  noTab={i === iTab}
                   erros={problemas.filter((p) => p.slideId === s.id && p.nivel === "erro").length}
-                  aoMover={(dir) => moverComTeclado(i, dir)}
+                  aoTecla={(e) => teclaCard(e, i)}
+                  aoMover={(dir, focoEm) => mover(i, dir, focoEm)}
+                  aoDuplicar={() => duplicar(i)}
                 />
               ))}
             </ol>
@@ -172,37 +222,43 @@ function ItemSlide({
   indice,
   total,
   selecionado,
+  noTab,
   erros,
+  aoTecla,
   aoMover,
+  aoDuplicar,
 }: {
   slide: Slide;
   indice: number;
   total: number;
   selecionado: boolean;
+  noTab: boolean;
   erros: number;
-  aoMover(dir: -1 | 1): void;
+  aoTecla(e: KeyboardEvent<HTMLButtonElement>): void;
+  aoMover(dir: -1 | 1, focoEm?: string): void;
+  aoDuplicar(): void;
 }) {
-  // O próprio card é a alça de arrasto (só ponteiro; o teclado usa Alt + setas)
+  // O próprio card é a alça de arrasto (só ponteiro)
   const { listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: slide.id,
   });
-  const { selecionarSlide, duplicarSlide, excluirSlide } = useProjeto.getState();
+  const { selecionarSlide, excluirSlide } = useProjeto.getState();
   const titulo = tituloCurto(slide);
   const rotulo = `Tela ${indice + 1}`;
-  const dicaId = useId();
+  const r = rotulo.toLowerCase();
 
   async function excluir() {
-    const desfazer = "Para voltar atrás: Desfazer (⌘Z).";
+    const desfazer = `Para voltar atrás: Desfazer (${ATALHO_DESFAZER}).`;
     const mensagem =
       slide.tipo === "capa"
-        ? `Excluir a capa (“${titulo}”)? O SCORM ficará sem capa. Para criar outra, use “+ Capa” na faixa de telas. ${desfazer}`
+        ? `Excluir a capa (“${titulo}”)? O SCORM ficará sem capa. Para criar outra, use o botão “Capa” na faixa de telas. ${desfazer}`
         : slide.tipo === "fim"
-          ? `Excluir a tela de fim (“${titulo}”)? Sem ela o SCORM não pode ser exportado. Para criar outra, use “+ Tela de fim” na faixa de telas. ${desfazer}`
-          : `Excluir a ${rotulo.toLowerCase()} (“${titulo}”)? ${desfazer}`;
+          ? `Excluir a tela de fim (“${titulo}”)? Sem ela o SCORM não pode ser exportado. Para criar outra, use o botão “Tela de fim” na faixa de telas. ${desfazer}`
+          : `Excluir a ${r} (“${titulo}”)? ${desfazer}`;
     const ok = await confirmar(mensagem, { titulo: "Excluir tela" });
     if (!ok) return;
     excluirSlide(slide.id);
-    // O botão de excluir sumiu: foca a tela vizinha (anterior, senão a próxima) ou o título da faixa.
+    // O card sumiu: foca a tela vizinha (anterior, senão a próxima) ou o título da faixa.
     requestAnimationFrame(() => {
       const botoes = document.querySelectorAll<HTMLElement>(".lista-slides .slide-botao");
       const alvo = botoes[Math.max(0, indice - 1)] ?? document.querySelector<HTMLElement>(".lista-slides .coluna-titulo");
@@ -221,17 +277,13 @@ function ItemSlide({
         type="button"
         ref={setActivatorNodeRef}
         className="slide-botao"
-        aria-current={selecionado ? "true" : undefined}
-        aria-describedby={dicaId}
+        tabIndex={noTab ? 0 : -1}
+        aria-current={selecionado ? "step" : undefined}
         aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
-        title={`${rotulo} de ${total}. ${DICA_MOVER}`}
+        title={`${rotulo} de ${total}`}
         {...listeners}
         onClick={() => selecionarSlide(slide.id)}
-        onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
-          if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-          e.preventDefault();
-          aoMover(e.key === "ArrowLeft" ? -1 : 1);
-        }}
+        onKeyDown={aoTecla}
       >
         <span className="slide-topo">
           <span className="slide-num" aria-hidden="true">
@@ -252,29 +304,39 @@ function ItemSlide({
         </span>
         <span className="slide-titulo">{titulo}</span>
       </button>
-      <span id={dicaId} hidden>
-        {DICA_MOVER}
-      </span>
-      <div className="slide-acoes">
-        <button
-          type="button"
-          className="btn-icone"
-          aria-label={`Duplicar ${rotulo.toLowerCase()}`}
-          title="Duplicar"
-          onClick={() => duplicarSlide(slide.id)}
-        >
-          <Icone nome="copiar" />
-        </button>
-        <button
-          type="button"
-          className="btn-icone perigo"
-          aria-label={`Excluir ${rotulo.toLowerCase()}`}
-          title="Excluir"
-          onClick={excluir}
-        >
-          <Icone nome="lixeira" />
-        </button>
-      </div>
+      {/* Ações só no card selecionado: mantém o Tab curto e dá alternativa ao arrasto */}
+      {selecionado && (
+        <div className="slide-acoes">
+          <button
+            type="button"
+            className="btn-icone"
+            data-acao="esq"
+            aria-label={`Mover ${r} para a esquerda`}
+            title="Mover para a esquerda (Alt + ←)"
+            aria-disabled={indice === 0 || undefined}
+            onClick={() => indice > 0 && aoMover(-1, '[data-acao="esq"]')}
+          >
+            <Icone nome="recolher" />
+          </button>
+          <button
+            type="button"
+            className="btn-icone"
+            data-acao="dir"
+            aria-label={`Mover ${r} para a direita`}
+            title="Mover para a direita (Alt + →)"
+            aria-disabled={indice === total - 1 || undefined}
+            onClick={() => indice < total - 1 && aoMover(1, '[data-acao="dir"]')}
+          >
+            <Icone nome="expandir" />
+          </button>
+          <button type="button" className="btn-icone" aria-label={`Duplicar ${r}`} title="Duplicar" onClick={aoDuplicar}>
+            <Icone nome="copiar" />
+          </button>
+          <button type="button" className="btn-icone perigo" aria-label={`Excluir ${r}`} title="Excluir" onClick={excluir}>
+            <Icone nome="lixeira" />
+          </button>
+        </div>
+      )}
     </li>
   );
 }

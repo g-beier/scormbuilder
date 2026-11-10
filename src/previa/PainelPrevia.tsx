@@ -216,19 +216,17 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
   const n = projeto.slides.findIndex((s) => s.id === slideSelecionadoId);
 
   return (
-    <aside className={`painel-previa${recolhido ? " recolhido" : ""}`} aria-label="Prévia">
+    <aside className="painel-previa" aria-label="Prévia" hidden={recolhido}>
       <div className="previa-cabecalho">
         <h2 className="coluna-titulo">Prévia</h2>
         <button
           type="button"
-          className="btn-icone previa-esconder"
-          aria-expanded={!recolhido}
+          className="btn btn-pequeno previa-esconder"
           aria-controls={id}
-          aria-label={recolhido ? "Mostrar prévia" : "Esconder prévia"}
-          title={recolhido ? "Mostrar prévia" : "Esconder prévia (a edição ocupa a largura toda)"}
+          title="A edição passa a ocupar a largura toda. Para voltar, use “Mostrar prévia” na faixa de telas."
           onClick={aoAlternar}
         >
-          <Icone nome="fechar" />
+          <Icone nome="previa" tamanho={16} /> Esconder prévia
         </button>
       </div>
       <div id={id} className="previa-corpo" hidden={recolhido} ref={corpoRef}>

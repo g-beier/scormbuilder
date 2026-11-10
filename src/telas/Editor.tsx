@@ -183,15 +183,14 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
           previaRecolhida={previaRecolhida}
           aoAlternarPrevia={alternarPrevia}
         />
-        {!previaRecolhida && (
-          <PainelPrevia
-            projeto={projeto}
-            slideSelecionadoId={slideSelecionadoId}
-            selecaoN={selecaoN}
-            recolhido={false}
-            aoAlternar={alternarPrevia}
-          />
-        )}
+        {/* Escondida, a prévia continua montada: guarda o modo, o tamanho e o progresso simulado */}
+        <PainelPrevia
+          projeto={projeto}
+          slideSelecionadoId={slideSelecionadoId}
+          selecaoN={selecaoN}
+          recolhido={previaRecolhida}
+          aoAlternar={alternarPrevia}
+        />
         {!previaRecolhida && <Separador valor={larguraEfetiva} aoMudar={mudarLargura} conteiner={conteiner} />}
         <main className="coluna-form" aria-label="Edição da tela">
           {slide ? (

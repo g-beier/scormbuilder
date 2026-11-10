@@ -77,7 +77,8 @@ export function Separador({
       aria-valuemax={Math.round(limitarLargura(100, t))}
       aria-valuenow={Math.round(valor)}
       aria-valuetext={`Edição com ${Math.round(valor)}% da largura`}
-      title="Arraste para mudar a largura da edição (duplo clique volta ao padrão)"
+      title="Arraste para mudar a largura da edição. Duplo clique volta ao padrão. No teclado: ← e → ajustam (Shift acelera), Home e End vão ao mínimo e ao máximo, Enter volta ao padrão."
+      aria-description="Use ← e → para ajustar; Shift acelera; Home e End vão ao mínimo e ao máximo; Enter volta ao padrão."
       tabIndex={0}
       onPointerDown={aoBaixar}
       onPointerMove={(e) => arrastando.current && porPonteiro(e.clientX)}
