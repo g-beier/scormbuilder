@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "scorm-builder",
+  "productName": "SCORM Builder",
   "version": "0.1.0",
   "identifier": "br.org.escoteirosrs.scormbuilder",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "scorm-builder",
-        "width": 800,
-        "height": 600
+        "title": "SCORM Builder",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700
       }
     ],
     "security": {

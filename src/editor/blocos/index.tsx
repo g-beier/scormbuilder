@@ -1,0 +1,40 @@
+import type { ComponentType } from "react";
+import type { Bloco, TipoBloco } from "../../modelo/tipos";
+import type { PropsFormBloco } from "./comum";
+import { FormTexto } from "./FormTexto";
+import { FormLista } from "./FormLista";
+import { FormCards } from "./FormCards";
+import { FormOrdenar } from "./FormOrdenar";
+import { FormLinha } from "./FormLinha";
+import { FormQuiz } from "./FormQuiz";
+import { FormContraste } from "./FormContraste";
+import { FormDestaque, FormFonte } from "./FormDestaque";
+import { FormConfira } from "./FormConfira";
+
+/** Form de cada tipo de bloco. */
+export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extract<Bloco, { tipo: T }>>> } = {
+  texto: FormTexto,
+  lista: FormLista,
+  cards: FormCards,
+  ordenar: FormOrdenar,
+  linha: FormLinha,
+  quiz: FormQuiz,
+  contraste: FormContraste,
+  destaque: FormDestaque,
+  confira: FormConfira,
+  fonte: FormFonte,
+};
+
+/** Descrição curta de cada tipo, para o menu "Adicionar bloco". */
+export const DESCRICOES_BLOCO: Record<TipoBloco, string> = {
+  texto: "Um ou mais parágrafos de texto corrido.",
+  lista: "Itens com marcadores.",
+  cards: "Cartões coloridos com título e texto, lado a lado.",
+  ordenar: "O aluno arrasta passos para a ordem certa.",
+  linha: "Marcos numerados, de cima para baixo.",
+  quiz: "Perguntas de escolha única, com explicação.",
+  contraste: "Comparação lado a lado (ex.: evite × prefira).",
+  destaque: "Caixa colorida com a ideia principal.",
+  confira: "Botão que abre uma janela com mais detalhes.",
+  fonte: "Referência ou link para a fonte, em letra pequena.",
+};
