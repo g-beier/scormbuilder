@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Aplicativo desktop (Tauri 2 + React 19 + TypeScript + Vite) para **construir pacotes SCORM 1.2** de forma amigável, para o Moodle do Campo Escola Virtual (CEV) dos Escoteiros do Brasil. O usuário escolhe tipos de slide (capa, cards, quiz, arrastar para ordenar, linha do tempo, "Confira", fim etc.), preenche formulários e o app gera o `js/data.js`, o `imsmanifest.xml` e o `.zip` pronto para o Moodle.
 
-Estado: scaffold do `create-tauri-app` (template `react-ts`); o editor ainda não foi escrito. Idioma da interface e dos textos: português do Brasil.
+É um **builder**: cria SCORMs novos a partir de um projeto próprio, com um runtime próprio. O `~/Dev/ead-scorm` é fonte de conhecimento e de importação, não modelo a copiar. Plano de módulos (M0–M6): `~/.claude/plans/vamos-planejar-o-desenvolvimento-enumerated-trinket.md`. Idioma da interface e dos textos: português do Brasil.
 
 ## Comandos
 
@@ -18,20 +18,39 @@ npm run build            # tsc + vite build (checagem de tipos do front)
 npm run tauri build      # bundle de produção (.app/.dmg)
 cd src-tauri && cargo check   # checagem do backend Rust
 cd src-tauri && cargo test    # testes Rust
+npm test                          # vitest (src/**/*.test.ts)
+npx vitest run src/modelo/compilar.test.ts   # um arquivo
+npx vitest run -t "nomePacote"               # um teste pelo nome
+cd src-tauri && cargo clippy -- -D warnings
+# runtime: converte os 18 LEITURA2 do ead-scorm, compara com o original (Playwright) e testa bloqueio/conclusão/retomada
+node runtime/test/montar.mjs "$TMPDIR"cev-m0 && node runtime/test/comparar.mjs "$TMPDIR"cev-m0
 ```
 
-Não há test runner JS configurado ainda.
+O teste de ouro em `src/modelo/importar.test.ts` lê `~/Dev/ead-scorm/*_LEITURA2/js/data.js`. Se a pasta não existir, ele é pulado.
 
 ## Estrutura
 
-- `src/`: front React (editor, prévia, formulários).
-- `src-tauri/`: backend Rust (`src/lib.rs` registra os comandos `#[tauri::command]`; `tauri.conf.json` define janela, bundle e CSP). Use o backend para acesso a disco e geração do zip, não o front.
+```
+runtime/        motor que vai DENTRO de cada pacote: ES5, sem build, offline (index.html com {{TITULO}}, js/motor.js, js/scorm.js, css/tema.css, fonts/)
+                ORIGEM.md registra de qual commit do ead-scorm veio; test/ não vai para o pacote
+src/modelo/     TS puro: tipos do Projeto, fábrica, validar (mensagens pt-BR), compilar (Projeto → data.js v2), importar (data.js legado/v2 → Projeto)
+src/servicos/   wrappers de invoke() (rascunhos.ts) e autosave com debounce (autosave.ts)
+src/estado/, src/telas/, src/editor/, src/previa/   UI (store zustand+immer+zundo, Início, Editor, prévia)
+src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.json e arquivos .cevscorm), lib.rs (registro)
+```
+
+- Todo acesso a disco é feito por comandos Rust (`std::fs`). O webview não tem permissão `fs`, só `dialog` (open/save/confirm). A lógica Rust fica em funções `*_em(base: &Path, …)` testáveis. Os comandos só resolvem `app_data_dir`.
+- A prévia e o pacote exportado usam **o mesmo** `runtime/`. Nunca duplique a lógica do motor no front.
+
+### Projeto (`.cevscorm` / rascunho) ≠ `data.js`
+
+O projeto (`src/modelo/tipos.ts`) é `{ formato: "cev-scorm-builder", versao: 1, id (uuid), meta: { curso, ud, atividade, numero, titulo, contexto }, slides, criadoEm, atualizadoEm, extras? }`. Slides e blocos têm ids curtos estáveis (`s-xxxxxxxx`, `b-xxxxxxxx`). Campos desconhecidos vindos de importação ficam em `extras` e nunca são descartados, mas também não vão para o pacote. `compilarDataJs` é determinístico. O nome do pacote vem de `nomePacote(meta)` = `CURSO_UD<n>_<ATIVIDADE><n>`, que também é o `CONTEUDO.id` e a chave de storage.
 
 ## Agentes (`.claude/agents/`)
 
 | Agente | Responsável por |
 |---|---|
-| `scorm-engine` | runtime do pacote (motor LEITURA2, kit, novos tipos de slide) em `~/Dev/ead-scorm` |
+| `scorm-engine` | `runtime/`: motor do pacote, novos tipos de bloco, SCORM 1.2 |
 | `tauri-backend` | `src-tauri/`: comandos, disco, manifesto, zip, capabilities |
 | `editor-frontend` | `src/`: editor, tipos TS do esquema, importar/serializar `data.js`, prévia |
 | `scorm-qa` | verificação de pacotes (estrutura, navegador 1200/375px, conclusão); só reporta |
@@ -39,46 +58,40 @@ Não há test runner JS configurado ainda.
 
 Fluxo de um tipo novo: `scorm-engine` implementa no motor e documenta o contrato no esquema abaixo, depois `editor-frontend` + `tauri-backend` implementam, por fim `scorm-qa` + `ux-a11y-reviewer` verificam.
 
-## Repositório de referência: `~/Dev/ead-scorm`
+## Runtime v2 e formato `data.js` v2
 
-Fonte da verdade dos modelos SCORM. Leia o `README.md`, o `.claude/CLAUDE.md` e o `.claude/docs/` de lá antes de mudar algo que afete o pacote gerado. O pacote gerado precisa ficar idêntico ao que é feito à mão lá.
-
-Há três modelos:
-
-1. **LEITURA2** (ex.: `CTGESTAO_UD11_LEITURA2/`, 18 pacotes): motor genérico de slides. `js/app.js` + `css/tema.css` + `js/scorm.js` + `fonts/` são iguais entre os pacotes (UD1–3 têm uma versão um pouco mais antiga; use a da UD4+). **Todo o conteúdo fica em `js/data.js`.** É o alvo principal do construtor.
-2. **QUIZ ramificado** (`CTGESTAO_UD11_QUIZ/`): questionário sem nota em que cada alternativa aponta a `proxima` pergunta (número ou `"fim"`). Usa o kit `base/scorm-kit` (`Kit.*`, `kit.css`, `moodle.js`).
-3. **Estudo de caso** (`MAPIJ_UD4_LEITURA3/`): pacote sob medida com o kit (`Kit.quiz` de múltipla seleção, reflexão enviada ao LMS, variações). O `data.js` tem estrutura livre.
-
-### Esquema do `data.js` do LEITURA2
+O pacote gerado roda `runtime/js/motor.js`. Ele foi derivado do motor LEITURA2 do ead-scorm, e o DOM sai idêntico ao dos 18 pacotes originais.
 
 ```js
-window.CONTEUDO = {
-  contexto: "Curso … · UD n – …",          // eyebrow do cabeçalho
-  slides: [
-    { tipo: "capa", kicker, titulo, sub },
-    { /* slide de conteúdo: todos os blocos são opcionais e renderizados nesta ordem */
-      kicker, titulo,
-      paras: [html],
-      lista: [html],
-      cards: [{ cor: "navy"|"green"|"red"|"yellow", titulo, breve, paras, lista }], colunas: 2,
-      fluxos: [{ nome, passos: [ordem correta], porque, nota }],   // arrastar para ordenar
-      linha: [{ titulo, texto }],                                // linha do tempo
-      quiz: [{ pergunta, opcoes: [html], correta: índice, explica }],
-      contraste: [{ cor, titulo, texto }],
-      destaque: html,                                            // callout
-      modais: [{ id único, botao, titulo, paras }],              // "Confira" / saiba mais
-      fonte: html },
-    { tipo: "fim", titulo, texto }                               // obrigatório: o motor procura [data-fim]
-  ]
-};
+window.CONTEUDO = { formato: 2, id: "CTGESTAO_UD11_LEITURA2", contexto, titulo, slides: [
+  { id, tipo: "capa", kicker, titulo, sub },
+  { id, tipo: "conteudo", kicker, titulo, blocos: [ /* renderizados NA ORDEM do array */ ] },
+  { id, tipo: "fim", titulo, texto } ] }            // exatamente uma "fim"
+// blocos (todos com id único):
+{ tipo: "texto", paras: [html] }        { tipo: "lista", itens: [html] }
+{ tipo: "cards", colunas?: 2, cards: [{ cor: "navy"|"green"|"red"|"yellow", titulo?, breve?, paras?, lista? }] }
+{ tipo: "ordenar", nome, passos: [html na ordem correta], porque, nota? }   // arrastar/setas + sugestão
+{ tipo: "linha", itens: [{ titulo, texto }] }
+{ tipo: "quiz", perguntas: [{ pergunta, opcoes: [html], correta, explica }] }
+{ tipo: "contraste", itens: [{ cor, titulo, texto }] }
+{ tipo: "destaque", html }              { tipo: "confira", botao, titulo, paras }   // modal; id do bloco = id do modal
+{ tipo: "fonte", html }
 ```
 
-Comportamentos do motor que o editor precisa refletir na prévia e na validação:
-- Os textos são inseridos com `innerHTML`, então aceitam `<strong>`, `<a href target='_blank' rel='noopener'>` etc.
-- Um slide com 2 ou mais `fluxos` vira uma tela por fluxo ("· k de n"). `paras` só aparece na primeira tela; `contraste`, `destaque` e `fonte`, só na última.
-- O botão "Próximo" fica bloqueado até o aluno responder os quizzes, abrir a sugestão de cada fluxo e abrir os modais da tela. A conclusão SCORM exige tudo isso em todas as telas.
-- O estado vai para `cmi.suspend_data` (limite de 4096 caracteres no SCORM 1.2). Por isso, pacotes muito grandes podem estourar.
-- `index.html` tem o título fixo no `<h1 class="topo-h1">` e no `<title>`. O manifesto também repete o título.
+- `Motor.iniciar(conteudo, { chave?, telaInicial?, livre? })`. `livre` é o modo autor: não bloqueia o "Próximo" e esconde o aviso, mas as pendências continuam contando. `telaInicial` tem prioridade sobre `lesson_location`. A chamada devolve `{ ir, tela, total, pendencias, pendenciaTela, concluido }`.
+- Tipo novo de bloco: `Motor.bloco(tipo, { render(b, ctx), pendentes, aviso, falta: [sing, plural], estado, restaurar })`. Tipo desconhecido gera um aviso discreto, sem quebrar.
+- Textos vão por `innerHTML`, então aceitam `<strong>`, `<em>` e `<a target='_blank' rel='noopener'>`.
+- O "Próximo" fica bloqueado até o aluno responder os quizzes, abrir a sugestão de cada `ordenar` e abrir cada `confira`. A conclusão exige isso em todas as telas.
+- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar e confira = `1`. O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
+- Diferente do motor antigo: o runtime **não** divide `ordenar` em várias telas (a importação de legado faz isso), e o progresso também é salvo em localStorage fora do LMS.
+- Mudar o runtime exige rodar `runtime/test/` (comparação com o original) e atualizar o `runtime/ORIGEM.md`.
+
+## Repositório de referência: `~/Dev/ead-scorm`
+
+Fonte do visual aprovado e dos pacotes existentes (só leitura a partir daqui). Leia o `README.md`, o `.claude/CLAUDE.md` e o `.claude/docs/` de lá antes de mudar algo que afete o pacote gerado.
+
+- **LEITURA2** (18 pacotes, ex.: `CTGESTAO_UD11_LEITURA2/`): a origem do runtime. O `data.js` legado tem blocos em ordem fixa (`paras`, `lista`, `cards`, `fluxos`, `linha`, `quiz`, `contraste`, `destaque`, `modais`, `fonte`) e é convertido por `src/modelo/importar.ts`.
+- **QUIZ ramificado** (`CTGESTAO_UD11_QUIZ/`) e **Estudo de caso** (`MAPIJ_UD4_LEITURA3/`): usam o kit `base/scorm-kit` (`Kit.quiz` de múltipla seleção, `Kit.escolha`, `Kit.reflexao`). São a referência para os tipos novos do M6.
 
 ### Regras de exportação (espelhar o `build.py` do ead-scorm)
 
@@ -90,8 +103,8 @@ Comportamentos do motor que o editor precisa refletir na prévia e na validaçã
 ## Novos tipos de slide
 
 O escopo inclui tipos que o motor ainda não tem (ex.: arrastar para categorias, reflexão). Um tipo novo precisa existir **no runtime do pacote** antes de existir no editor:
-1. Implementar no motor (app.js/tema.css) seguindo o guia visual (`ead-scorm/.claude/docs/guia-visual-scorm.md`) e os princípios (`principios-scorm.md`): acessível por teclado, alvos de 44px, sem rolagem horizontal em 375px, cabe em ~666,5px de altura no iframe do Moodle, conta para a conclusão e é salvo no `suspend_data`.
-2. Reaproveitar o `Kit.*` de `base/scorm-kit` quando o componente já existir lá (reflexão, quiz de múltipla seleção). No ead-scorm, mudanças no kit são feitas em `base/` e depois copiadas.
+1. Registrar no runtime (`Motor.bloco` em `runtime/js/motor.js`, CSS em `runtime/css/tema.css`) seguindo o guia visual (`ead-scorm/.claude/docs/guia-visual-scorm.md`) e os princípios (`principios-scorm.md`): acessível por teclado, alvos de 44px, sem rolagem horizontal em 375px, cabe em ~666,5px de altura no iframe do Moodle, conta para a conclusão e é salvo no `suspend_data`.
+2. Portar o comportamento do `Kit.*` (`ead-scorm/base/scorm-kit/js/kit.js`) quando o componente já existir lá (reflexão, quiz de múltipla seleção, escolha).
 3. Só então adicionar o formulário, o tipo TS e a validação no editor.
 
 Não mudar cores, fontes ou formas do visual aprovado pelo cliente (Poppins/Krona One, cantos arredondados, rodapé tricolor) sem pedido explícito.

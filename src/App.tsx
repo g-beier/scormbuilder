@@ -1,51 +1,61 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect } from "react";
+import type { Projeto } from "./modelo/tipos";
+import { agendarSalvamento, ligarAutosave, salvarAgora, useProjeto, useSalvamento } from "./estado/projeto";
+import { salvarRascunho } from "./servicos/rascunhos";
+import { emTauri } from "./servicos/ambiente";
+import { confirmar } from "./servicos/dialogos";
+import { Inicio, type OpcoesAbrir } from "./telas/Inicio";
+import { Editor } from "./telas/Editor";
+import { Avisos } from "./editor/Avisos";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+export default function App() {
+  const projeto = useProjeto((s) => s.projeto);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    // No navegador (npm run dev) não há disco: o editor funciona, sem salvar.
+    if (!emTauri()) return;
+    const desligar = ligarAutosave(salvarRascunho);
+    const antesDeSair = () => void salvarAgora();
+    window.addEventListener("beforeunload", antesDeSair);
+    // Fechar a janela: grava o pendente antes (o Tauri espera o handler).
+    let soltar: (() => void) | undefined;
+    let cancelado = false;
+    import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+      getCurrentWindow()
+        .onCloseRequested(async () => {
+          await salvarAgora();
+        })
+        .then((f) => (cancelado ? f() : (soltar = f))),
+    );
+    return () => {
+      cancelado = true;
+      soltar?.();
+      window.removeEventListener("beforeunload", antesDeSair);
+      desligar();
+    };
+  }, []);
+
+  function abrir(p: Projeto, opcoes?: OpcoesAbrir) {
+    useProjeto.getState().abrir(p);
+    if (opcoes?.novo) agendarSalvamento();
+  }
+
+  async function voltarAoInicio() {
+    await salvarAgora();
+    if (emTauri() && useSalvamento.getState().estado === "erro") {
+      const sair = await confirmar(
+        "As últimas alterações não foram salvas. Voltar ao início mesmo assim? Use “Salvar como…” para guardar uma cópia.",
+        { titulo: "Alterações não salvas", botaoOk: "Voltar mesmo assim" },
+      );
+      if (!sair) return;
+    }
+    useProjeto.getState().fechar();
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <>
+      {projeto ? <Editor projeto={projeto} aoInicio={voltarAoInicio} /> : <Inicio aoAbrir={abrir} />}
+      <Avisos />
+    </>
   );
 }
-
-export default App;
