@@ -420,13 +420,15 @@ var Motor = (function () {
       if (e.target.closest && e.target.closest(".drag-list")) return;
       // Setas em campos de formulário (texto, opções) ficam com o campo
       if (e.target.closest && e.target.closest("input, textarea, select")) return;
+      // Dentro do questionário com caminhos, setas não saem da tela no meio das perguntas
+      if (e.target.closest && e.target.closest(".ramificado")) return;
       if (e.key === "ArrowRight" || e.key === "PageDown") show(current + 1);
       if (e.key === "ArrowLeft" || e.key === "PageUp") show(current - 1);
     });
 
     var tx = null;
     stage.addEventListener("touchstart", function (e) {
-      tx = e.target.closest && e.target.closest(".drag-list, .cat-item, textarea") ? null : e.changedTouches[0].clientX;
+      tx = e.target.closest && e.target.closest(".drag-list, .cat-item, .ramificado, textarea") ? null : e.changedTouches[0].clientX;
     }, { passive: true });
     stage.addEventListener("touchend", function (e) {
       if (tx === null) return;
@@ -1472,8 +1474,10 @@ var Motor = (function () {
       var telas = P.map(function (p, k) {
         var sec = el("div", "ram-pergunta");
         sec.hidden = true;
-        sec.appendChild(texto("p", "ram-num", "Pergunta " + (k + 1)));
-        var perg = el("p", "bloco-perg", p.enunciado || "");
+        // O número fica dentro do enunciado focado: o leitor de tela anuncia "Pergunta n" junto
+        var perg = el("p", "bloco-perg");
+        perg.appendChild(texto("span", "ram-num", "Pergunta " + (k + 1)));
+        perg.appendChild(el("span", "ram-enun", p.enunciado || ""));
         perg.id = base + "p" + k;
         perg.tabIndex = -1;
         sec.appendChild(perg);
@@ -1529,9 +1533,11 @@ var Motor = (function () {
         t.ret.innerHTML = "";
         if (a && a.retorno) {
           var card = el("div", "card pergunta");
-          card.appendChild(texto("h3", null, "Retorno"));
+          card.appendChild(texto("p", "card-tit", "Retorno"));   // não é título: fica numa região aria-live
           card.appendChild(texto("p", null, a.retorno));
           t.ret.appendChild(card);
+        } else if (!a) {
+          t.ret.appendChild(texto("p", "nota", "Escolha uma alternativa para continuar."));
         }
         var d = destino(k);
         t.prox.disabled = d == null;
@@ -1588,12 +1594,14 @@ var Motor = (function () {
         var ok = true;
         caminho().forEach(function (k) {
           var g = false;
-          try { g = window.Scorm.gravarResposta(b.id + "-P" + (k + 1), "Pergunta " + (k + 1) + ": " + textoPuro(alt(k).texto)); } catch (er) { g = false; }
+          var txt = "Pergunta " + (k + 1) + ": " + textoPuro(P[k].enunciado) + " → " + textoPuro(alt(k).texto);
+          try { g = window.Scorm.gravarResposta(b.id + "-P" + (k + 1), txt); } catch (er) { g = false; }
           ok = g && ok;
         });
         if (!ok) {
           status.innerHTML = "";
           status.appendChild(texto("div", "resultado parcial", "Não foi possível registrar agora. Suas respostas continuam na tela: tente novamente."));
+          status.focus();
           return;
         }
         ctx.e = true;

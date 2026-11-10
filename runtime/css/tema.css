@@ -330,13 +330,15 @@ h1, h2, h3, .kicker, .topo-h1, .eyebrow, .flow-name, .tl-n, .progresso-texto, bu
 
 /* ---------- Questionário com caminhos (M6) ---------- */
 .ram-num {
-  display: inline-block; margin: 0 0 8px; padding: 2px 10px; border-radius: 999px;
+  display: table; margin: 0 0 8px; padding: 2px 10px; border-radius: 999px;
   background: var(--amarelo); color: var(--navy); font-size: 13px; font-weight: 700; letter-spacing: .02em;
 }
 .ramificado .bloco-perg:focus, .ram-fim-tit:focus { outline: none; }
 .ramificado .bloco-perg:focus-visible, .ram-fim-tit:focus-visible { outline: 3px solid var(--amarelo); outline-offset: 2px; }
 .ram-nav { justify-content: space-between; }
 .ram-nav .btn-act.sec[hidden] + .btn-act { margin-left: auto; }
+.ram-enun { display: block; }
+.ramificado .card-tit { font-weight: 700; color: var(--navy); margin: 0 0 4px; }
 .ram-fim-tit { margin: 0 0 8px; color: var(--navy); font-size: 1.05rem; }
 .ram-resumo { margin: 0 0 12px; padding-left: 1.6em; }
 .ram-resumo li { margin: 0 0 8px; }

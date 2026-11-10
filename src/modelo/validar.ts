@@ -424,7 +424,7 @@ export function validar(projeto: Projeto): Problema[] {
         }
         const pos = new Map<string, number>();
         perguntas.forEach((p, k) => {
-          if (!p.id || pos.has(p.id)) erro(`perguntas[${k}].enunciado`, `a pergunta ${k + 1} tem um identificador repetido. Exclua e crie de novo.`);
+          if (!p.id || pos.has(p.id)) erro(`perguntas[${k}].enunciado`, `a pergunta ${k + 1} ficou duplicada por engano. Exclua-a e adicione de novo.`);
           else pos.set(p.id, k);
         });
         let destinosOk = true;

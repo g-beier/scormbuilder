@@ -178,7 +178,7 @@ describe("validar: erros", () => {
     ["ramificado destino inexistente", (p) => bl(p, "ramificado", (b) => (b.perguntas[0].alternativas[0].proxima = "q-9")), /pergunta que não existe mais/],
     ["ramificado para si mesma", (p) => bl(p, "ramificado", (b) => (b.perguntas[1].alternativas[1].proxima = "q-2")), /leva para a própria pergunta/],
     ["ramificado com ciclo", (p) => bl(p, "ramificado", (b) => (b.perguntas[2].alternativas[0].proxima = "q-1")), /pergunta 3 leva de volta à pergunta 1/],
-    ["ramificado id repetido", (p) => bl(p, "ramificado", (b) => (b.perguntas[2].id = "q-2")), /identificador repetido/],
+    ["ramificado id repetido", (p) => bl(p, "ramificado", (b) => (b.perguntas[2].id = "q-2")), /ficou duplicada por engano/],
     ["categorizar sem enunciado", (p) => bl(p, "categorizar", (b) => (b.enunciado = "")), /“Classificar em categorias”, falta o enunciado/],
     ["categorizar com 1 categoria", (p) => bl(p, "categorizar", (b) => b.categorias.splice(1)), /pelo menos 2 categorias/],
     ["categorizar com 5 categorias", (p) => bl(p, "categorizar", (b) => b.categorias.push("c", "d", "e")), /no máximo 4 categorias/],

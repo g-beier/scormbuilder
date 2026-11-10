@@ -107,17 +107,21 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
   eq(await visivel(f), 1, `${W} começa na pergunta 1`);
   eq(await f.$eval(sec(1) + ".ram-nav .btn-act.sec", (b) => b.hidden), true, `${W} sem Voltar na 1`);
   eq(await botaoProx(f, 1), { t: "Próxima pergunta", d: true }, `${W} Próxima desabilitada sem resposta`);
+  eq(await retorno(f, 1), "Escolha uma alternativa para continuar.", `${W} dica sem resposta`);
 
   // 1 → Não → 2
   await escolher(f, 1, 2);
   eq(await retorno(f, 1), "RetornoSiga para a pergunta 2.", `${W} retorno da alternativa`);
+  eq(await f.$eval(sec(1) + ".bloco-perg", (e) => e.textContent), "Pergunta 1A UEL tem CNPJ próprio?", `${W} número dentro do enunciado`);
   eq(await botaoProx(f, 1), { t: "Próxima pergunta", d: false }, `${W} Próxima liberada`);
   await f.click(sec(1) + ".ram-nav .btn-act:not(.sec)");
   eq(await visivel(f), 2, `${W} caminho 1 → 2`);
   eq(await f.evaluate(() => document.activeElement.className), "bloco-perg", `${W} foco no enunciado`);
+  await page.keyboard.press("ArrowLeft");
+  eq(await counter(f), "02 / 03", `${W} seta no enunciado não troca de tela`);
   // retorno vazio não mostra card; caracteres especiais via textContent
   await escolher(f, 2, 2);
-  eq(await retorno(f, 2), "", `${W} retorno vazio`);
+  eq(await retorno(f, 2), "", `${W} retorno vazio (sem card nem dica)`);
   await escolher(f, 2, 1);
   eq(await retorno(f, 2), "RetornoUEL patrocinada & <ok>.", `${W} retorno com & e < literais`);
   // voltar e trocar: 1 → Sim → 3
@@ -153,7 +157,7 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
   // registrar
   await f.click(Q + ".ram-fim .btn-act:not(.sec)");
   const d = await lms(page);
-  eq(interacoes(d), ["b-q-P1", "Pergunta 1: Sim.", "b-q-P3", "Pergunta 3: De um adulto.", "b-q-P4", "Pergunta 4: Associação própria."], `${W} interações`);
+  eq(interacoes(d), ["b-q-P1", "Pergunta 1: A UEL tem CNPJ próprio? → Sim.", "b-q-P3", "Pergunta 3: Em nome de quem está a conta? → De um adulto.", "b-q-P4", "Pergunta 4: Registre a situação da UEL. → Associação própria."], `${W} interações`);
   eq(await f.$eval(Q + ".refl-status", (e) => e.textContent), "✓ Respostas registradas. Obrigado.", `${W} confirmação`);
   eq(await f.evaluate(() => document.activeElement.className), "refl-status", `${W} foco na confirmação`);
   ok(!(await nextDis(f)), `${W} libera após registrar`);

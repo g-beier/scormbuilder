@@ -27,7 +27,7 @@ export function FormRamificado({ bloco, editar, f }: PropsFormBloco<BlocoRamific
   return (
     <ListaEditavel
       titulo="Perguntas"
-      ajuda="O aluno vê uma pergunta por vez, começando pela 1. Cada alternativa mostra um retorno e leva a outra pergunta ou ao fim. Não há certo ou errado. No fim, o aluno confere o resumo e registra as respostas no Moodle; só então pode avançar."
+      ajuda="O aluno vê uma pergunta por vez, começando pela 1, e não há certo ou errado. Cada alternativa mostra um retorno e leva a outra pergunta ou ao fim. No fim, o aluno confere o resumo e registra as respostas no Moodle; só então pode avançar. Ao adicionar uma pergunta, escolha em “Depois desta, ir para” qual alternativa leva até ela."
       emCaixa
       itens={bloco.perguntas}
       rotuloItem={(k) => `Pergunta ${k + 1}`}
@@ -48,7 +48,7 @@ export function FormRamificado({ bloco, editar, f }: PropsFormBloco<BlocoRamific
           <ListaEditavel
             titulo={`Alternativas da pergunta ${k + 1}`}
             itens={p.alternativas}
-            rotuloItem={(j) => `Alternativa ${j + 1}`}
+            rotuloItem={(j) => `Alternativa ${j + 1} da pergunta ${k + 1}`}
             textoAdicionar="Adicionar alternativa"
             minimo={2}
             foco={f(`perguntas[${k}].alternativas`)}
@@ -69,7 +69,7 @@ export function FormRamificado({ bloco, editar, f }: PropsFormBloco<BlocoRamific
                   />
                   <CampoTexto
                     rotulo="Retorno desta alternativa (opcional)"
-                    ajuda="Aparece logo abaixo das alternativas quando o aluno escolhe esta. Texto simples, sem formatação."
+                    ajuda="Aparece logo abaixo das alternativas quando o aluno escolhe esta. Escreva só o texto, sem negrito nem links."
                     multilinha
                     valor={a.retorno}
                     foco={f(`${base}.retorno`)}
@@ -110,7 +110,10 @@ function SeletorDestino({
   return (
     <div className="campo">
       <label htmlFor={id}>Depois desta, ir para</label>
-      <select id={id} value={valido ? valor : ""} data-foco={foco} onChange={(e) => e.target.value && aoMudar(e.target.value)}>
+      <p id={`${id}-ajuda`} className="ajuda">
+        Para onde o aluno vai depois de escolher esta alternativa. Se você reordenar as perguntas, o destino continua o mesmo.
+      </p>
+      <select id={id} aria-describedby={`${id}-ajuda`} value={valido ? valor : ""} data-foco={foco} onChange={(e) => e.target.value && aoMudar(e.target.value)}>
         {!valido && <option value="">Escolha o destino…</option>}
         {perguntas.map((p, k) =>
           k === atual ? null : (
