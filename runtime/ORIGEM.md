@@ -75,4 +75,8 @@ Sem equivalente no ead-scorm. `Motor.imprimir(conteudo, raiz)` monta a leitura i
 - Tipo novo de bloco: pode registrar `imprimir(b, ctx)` em `Motor.bloco`. Bloco com pendência e sem `imprimir` vira um aviso discreto no documento.
 - CSS no fim do `tema.css`: `@page` A4, cores exatas na impressão, quebras de página que mantêm perguntas e linhas inteiras, links com a URL visível no papel.
 
+Depois da revisão de UX: telas com "Confira" (o padrão das Pesquisas) ganham um quadro "Suas anotações" antes da referência; o questionário com caminhos termina com linhas para anotar o caminho e a última resposta; o quiz diz "Marque uma alternativa."; a reflexão opcional diz "Resposta opcional."; o cabeçalho mostra o código do pacote e a data de geração (`opcoes.gerado`); `ordenar` e `categorizar` embaralham com semente no id do bloco (o mesmo conteúdo gera sempre o mesmo PDF); na impressão as bordas ficam mais escuras e as notas maiores.
+
+Ressalva: o PDF sai do diálogo de impressão do sistema e **não é marcado** (sem estrutura de títulos, listas e tabelas). Alunos com leitor de tela devem usar o pacote; o diálogo do editor diz isso.
+
 Teste: `node runtime/test/impressao.mjs "$TMPDIR"cev-m7 "$TMPDIR"cev-m0` (fixtures do M6 e, se existir a pasta do `montar.mjs`, os 18 LEITURA2): gera um PDF A4 de cada e confere cabeçalho, ausência da tela de fim, de controles e de gabarito, e o anexo do Confira.

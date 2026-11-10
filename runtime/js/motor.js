@@ -1679,6 +1679,23 @@ var Motor = (function () {
 
   function caixa() { var c = el("span", "imp-caixa"); c.setAttribute("aria-hidden", "true"); return c; }
 
+  // Embaralhamento estável (semente = id do bloco): o mesmo conteúdo gera sempre o mesmo PDF
+  function embaralharFixo(n, semente) {
+    // Park–Miller (ES5, só aritmética exata em double): semente a partir dos caracteres do id
+    var h = 1;
+    String(semente || "").split("").forEach(function (ch) { h = (h * 31 + ch.charCodeAt(0)) % 2147483647; });
+    if (h <= 0) h += 2147483646;
+    function aleatorio() { h = (h * 16807) % 2147483647; return (h - 1) / 2147483646; }
+    var ordem = [];
+    for (var i = 0; i < n; i++) ordem.push(i);
+    if (n < 2) return ordem;
+    for (var tent = 0; tent < 20; tent++) {
+      for (var k = n - 1; k > 0; k--) { var j = Math.floor(aleatorio() * (k + 1)); var t = ordem[k]; ordem[k] = ordem[j]; ordem[j] = t; }
+      if (!ordem.every(function (v, x) { return v === x; })) break;
+    }
+    return ordem;
+  }
+
   // Lista de alternativas com caixa para marcar
   function opcoesMarcar(itens, rotulo) {
     var ul = el("ul", "imp-opcoes");
@@ -1705,6 +1722,7 @@ var Motor = (function () {
       (b.perguntas || []).forEach(function (q) {
         var box = el("div", "quiz-q");
         box.appendChild(el("p", "quiz-pergunta", q.pergunta));
+        box.appendChild(texto("p", "nota", "Marque uma alternativa."));
         box.appendChild(opcoesMarcar(q.opcoes || []));
         wrap.appendChild(box);
       });
@@ -1730,7 +1748,7 @@ var Motor = (function () {
       box.appendChild(texto("p", "flow-help", "Numere os passos na ordem em que acontecem."));
       var ul = el("ul", "imp-numerar");
       var passos = b.passos || [];
-      embaralhar(passos.length).forEach(function (i) {
+      embaralharFixo(passos.length, b.id).forEach(function (i) {
         var li = el("li");
         li.appendChild(texto("span", "imp-num", ""));
         li.appendChild(el("span", null, passos[i]));
@@ -1757,6 +1775,7 @@ var Motor = (function () {
     reflexao: function (b) {
       var box = el("div", "bloco-q");
       box.appendChild(el("p", "bloco-perg", b.pergunta || ""));
+      if (b.opcional !== false) box.appendChild(texto("p", "nota", "Resposta opcional."));
       // O aviso padrão fala do envio à plataforma; no papel fica só o cuidado com os dados
       var aviso = b.aviso == null ? "Não escreva nomes nem dados que identifiquem crianças, famílias ou casos reais." : String(b.aviso);
       if (aviso) box.appendChild(texto("p", "nota aviso-refl", aviso));
@@ -1777,7 +1796,7 @@ var Motor = (function () {
       thead.appendChild(tr);
       tab.appendChild(thead);
       var tbody = el("tbody");
-      embaralhar(itens.length).forEach(function (i) {
+      embaralharFixo(itens.length, b.id).forEach(function (i) {
         var linha = el("tr");
         linha.appendChild(el("td", null, itens[i].texto || ""));
         cats.forEach(function () { var td = el("td", "imp-cel"); td.appendChild(caixa()); linha.appendChild(td); });
@@ -1806,12 +1825,19 @@ var Motor = (function () {
         }));
         box.appendChild(q);
       });
+      // O resultado do questionário fica registrado à mão
+      var fim = el("div", "imp-anotar");
+      fim.appendChild(texto("p", "imp-anotar-tit", "Anote o caminho que você fez (números das perguntas) e a sua última resposta:"));
+      fim.appendChild(linhasEmBranco(3));
+      box.appendChild(fim);
       return box;
     }
   };
 
-  function imprimir(conteudo, raiz) {
+  // opcoes.gerado: data da geração, mostrada no cabeçalho com o código do pacote
+  function imprimir(conteudo, raiz, opcoes) {
     var C = conteudo;
+    opcoes = opcoes || {};
     raiz = raiz || document.body;
     raiz.innerHTML = "";
     document.documentElement.classList.add("impressao");
@@ -1821,7 +1847,9 @@ var Motor = (function () {
       : C.formato !== 2 ? "O conteúdo está num formato que este motor não reconhece (esperado: formato 2)."
       : !C.slides || !C.slides.length ? "O conteúdo não tem telas." : null;
     if (problema) {
-      raiz.appendChild(texto("p", "imp-erro", problema));
+      var erro = texto("p", "imp-erro", problema);
+      erro.setAttribute("role", "alert");
+      raiz.appendChild(erro);
       return false;
     }
     var contadores = {};
@@ -1852,6 +1880,8 @@ var Motor = (function () {
       reg.appendChild(f);
     });
     cab.appendChild(reg);
+    var versao = [C.id, opcoes.gerado ? "gerado em " + opcoes.gerado : ""].filter(Boolean).join(" · ");
+    if (versao) cab.appendChild(texto("p", "imp-versao", versao));
     doc.appendChild(cab);
 
     C.slides.forEach(function (s, t) {
@@ -1873,6 +1903,15 @@ var Motor = (function () {
         }
         if (no) sec.appendChild(no);
       });
+      // Telas com "Confira" pedem que o aluno responda antes de conferir: espaço para anotar
+      var temConfira = (s.blocos || []).some(function (b) { return b && b.tipo === "confira"; });
+      if (temConfira) {
+        var anot = el("div", "imp-anotar");
+        anot.appendChild(texto("p", "imp-anotar-tit", "Suas anotações"));
+        anot.appendChild(linhasEmBranco(5));
+        var refs = sec.querySelectorAll(".imp-confira-ref");
+        sec.insertBefore(anot, refs.length ? refs[0] : null);
+      }
       sec.setAttribute("data-tela", t);
       doc.appendChild(sec);
     });

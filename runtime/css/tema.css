@@ -377,15 +377,19 @@ body.impressao {
 .imp-num { flex: none; width: 34px; height: 26px; border: 1.5px solid var(--navy); border-radius: 6px; }
 .imp-confira { margin: 14px 0; padding: 12px 16px; border: 1px solid var(--linha); border-left: 6px solid var(--amarelo); border-radius: var(--raio); background: #fff; }
 .imp-confira h3 { margin-top: 0; color: var(--navy); }
-.imp-confira-ref { margin: 12px 0; padding: 8px 12px; border-left: 4px solid var(--amarelo); background: var(--amarelo-tinta); font-size: 14px; }
+.imp-confira-ref { break-before: avoid; page-break-before: avoid; margin: 12px 0; padding: 8px 12px; border-left: 4px solid var(--amarelo); background: var(--amarelo-tinta); font-size: 14px; }
 .imp-anexo { break-before: page; page-break-before: always; }
 .imp-anexo-ref { float: left; margin: 0 8px 0 0; font-weight: 700; color: var(--navy); }
 .imp-linhas { margin-top: 10px; }
-.imp-linhas div { height: 30px; border-bottom: 1px solid #a7a9bd; }
+.imp-linhas div { height: 30px; border-bottom: 1.5px solid #8a8da8; }
+.imp-anotar { margin: 14px 0; padding: 10px 14px 12px; border: 1.5px solid #8a8da8; border-radius: var(--raio); break-inside: avoid; page-break-inside: avoid; }
+.imp-anotar-tit { margin: 0; font-weight: 600; color: var(--navy); font-size: 15px; }
+.imp-versao { margin: 10px 0 0; font-size: 13px; color: var(--tinta-suave); }
 .imp-tabela { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 15px; }
 .imp-tabela th, .imp-tabela td { border: 1px solid var(--linha); padding: 8px 10px; text-align: left; vertical-align: top; }
-.imp-tabela th { background: var(--navy-tinta); color: var(--navy); }
-.imp-tabela .imp-cel { text-align: center; width: 1%; white-space: nowrap; }
+.imp-tabela th { background: var(--navy-tinta); color: var(--navy); hyphens: none; -webkit-hyphens: none; word-break: normal; overflow-wrap: normal; min-width: 5.5em; }
+.imp-tabela th:first-child { width: auto; }
+.imp-tabela .imp-cel { text-align: center; }
 .imp-ram-q { margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed var(--linha); }
 .imp-ram-q:first-of-type { border-top: 0; padding-top: 0; }
 .imp-erro { margin: 32px; font-weight: 600; color: var(--vermelho); }
@@ -397,6 +401,10 @@ body.impressao {
 .imp-tela-tit + *, .imp-tela .kicker + .imp-tela-tit { break-before: avoid; page-break-before: avoid; }
 @media print {
   .imp-barra { display: none !important; }
+  /* Papel: bordas mais escuras e notas um pouco maiores (impressão econômica / P&B) */
+  .imp-doc .card, .imp-doc .bloco-q, .imp-doc .quiz-q, .imp-doc .flow-block, .imp-doc .aviso-refl,
+  .imp-tabela th, .imp-tabela td, .imp-numerar li { border-color: #8a8da8; }
+  .imp-doc .nota, .imp-destino { font-size: 14px; }
   .imp-doc { max-width: none; padding: 0; }
   .imp-doc a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 12px; word-break: break-all; color: var(--tinta-suave); }
 }

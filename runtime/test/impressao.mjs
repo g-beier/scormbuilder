@@ -20,7 +20,7 @@ for (const d of ["css", "fonts", "js"]) fs.cpSync(path.join(RUNTIME, d), path.jo
 const PAGINA = (dataJs) => `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
 <link rel="stylesheet" href="css/tema.css"></head><body><div id="doc"></div>
 <script src="js/motor.js"></script><script src="${dataJs}"></script>
-<script>window.OK = Motor.imprimir(window.CONTEUDO, document.getElementById("doc"));</script></body></html>`;
+<script>window.OK = Motor.imprimir(window.CONTEUDO, document.getElementById("doc"), { gerado: "10/11/2026" });</script></body></html>`;
 
 const casos = [];
 for (const f of ["kit-v2", "categorizar-v2", "ramificado-v2"]) {
@@ -84,6 +84,10 @@ for (const caso of casos) {
       tabelas: document.querySelectorAll(".imp-tabela").length,
       destinos: [...document.querySelectorAll(".imp-destino")].map((e) => e.textContent),
       confira: document.querySelectorAll(".imp-confira").length,
+      versao: document.querySelector(".imp-versao") ? document.querySelector(".imp-versao").textContent : null,
+      anotar: document.querySelectorAll(".imp-anotar").length,
+      telasComConfira: conteudo.filter((s) => (s.blocos || []).some((b) => b.tipo === "confira")).length,
+      ramificados: conteudo.reduce((n, s) => n + (s.blocos || []).filter((b) => b.tipo === "ramificado").length, 0),
       conferirRefs: document.querySelectorAll(".imp-confira-ref").length,
       conferirNoAnexo: document.querySelectorAll(".imp-anexo .imp-confira").length,
       confiraFonte: conteudo.reduce((n, s) => n + (s.blocos || []).filter((b) => b.tipo === "confira").length, 0),
@@ -112,6 +116,8 @@ for (const caso of casos) {
   eq(r.vazou, [], `${caso}: sem gabarito/retornos`);
   ok(!r.hs, `${caso}: sem rolagem horizontal`);
   eq([r.conferirRefs, r.conferirNoAnexo], [r.confiraFonte, r.confiraFonte], `${caso}: Confira no anexo, com referência na tela`);
+  eq(r.versao, `${await page.evaluate(() => window.CONTEUDO.id)} · gerado em 10/11/2026`, `${caso}: versão e data no cabeçalho`);
+  eq(r.anotar, r.telasComConfira + r.ramificados, `${caso}: espaço para anotar (telas com Confira + questionários)`);
   if (caso === "kit-v2") {
     eq(r.caixas, 3 + 2 + 3, `${caso}: caixas (múltipla 3 + 2, escolha 3)`);
     ok(r.linhas >= 4, `${caso}: linhas para a reflexão`);

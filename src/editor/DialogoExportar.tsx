@@ -261,8 +261,10 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
             <p>
               <strong>PDF da leitura</strong>
               <span className="ajuda">
-                Para o aluno baixar e guardar como registro. As atividades aparecem em versão para preencher à mão, sem as
-                respostas; o conteúdo dos “Confira” vai para o fim. Publique o PDF no Moodle ao lado do pacote.
+                Gera uma versão da leitura para imprimir ou salvar em PDF, que o aluno baixa e guarda como registro. As
+                atividades aparecem sem as respostas, para marcar e escrever depois de imprimir; o conteúdo dos “Confira”
+                vai para o fim. Depois de salvar, anexe o PDF à atividade no Moodle, ao lado do pacote. Alunos que usam
+                leitor de tela devem usar o próprio pacote: o PDF gerado não tem marcação de acessibilidade.
               </span>
             </p>
             <button
@@ -273,7 +275,7 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
               }
             >
               <Icone nome="arquivo" />
-              Abrir PDF da leitura…
+              Preparar PDF da leitura…
             </button>
           </div>
 
