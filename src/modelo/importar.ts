@@ -1,3 +1,4 @@
+import { desescaparHtml } from "./texto";
 import { novoId, metaVazia } from "./fabrica";
 import { normalizarSigla } from "./compilar";
 import type {
@@ -103,6 +104,14 @@ class Leitor {
     this.desvio(k, v);
     return "";
   }
+  /** Campo de texto simples (ver texto.ts): desfaz o escape do data.js. */
+  t(k: string): string {
+    return desescaparHtml(this.s(k));
+  }
+  tOpc(k: string): string | undefined {
+    const v = this.sOpc(k);
+    return v === undefined ? v : desescaparHtml(v);
+  }
   sOpc(k: string): string | undefined {
     const v = this.o[k];
     if (v === undefined || eStr(v)) return v;
@@ -145,7 +154,7 @@ class Leitor {
 function lerCard(o: Obj, av: string[], onde: string): Card {
   const l = new Leitor(o, av, onde);
   const c: Card = { cor: l.s("cor") as Cor };
-  const titulo = l.sOpc("titulo");
+  const titulo = l.tOpc("titulo");
   const breve = l.sOpc("breve");
   const paras = l.arrOpc("paras");
   const lista = l.arrOpc("lista");
@@ -158,13 +167,13 @@ function lerCard(o: Obj, av: string[], onde: string): Card {
 
 function lerLinha(o: Obj, av: string[], onde: string): ItemLinha {
   const l = new Leitor(o, av, onde);
-  return comExtras({ titulo: l.s("titulo"), texto: l.s("texto") }, l.fim(["titulo", "texto"]));
+  return comExtras({ titulo: l.t("titulo"), texto: l.s("texto") }, l.fim(["titulo", "texto"]));
 }
 
 function lerContraste(o: Obj, av: string[], onde: string): ItemContraste {
   const l = new Leitor(o, av, onde);
   return comExtras(
-    { cor: l.s("cor") as Cor, titulo: l.s("titulo"), texto: l.s("texto") },
+    { cor: l.s("cor") as Cor, titulo: l.t("titulo"), texto: l.s("texto") },
     l.fim(["cor", "titulo", "texto"]),
   );
 }
@@ -181,7 +190,7 @@ function lerPergunta(o: Obj, av: string[], onde: string): Pergunta {
 
 function lerFluxo(o: Obj, av: string[], onde: string, id?: string): BlocoOrdenar {
   const l = new Leitor(o, av, onde);
-  const b: BlocoOrdenar = { id: id ?? novoId("b"), tipo: "ordenar", nome: l.s("nome"), passos: l.arr("passos"), porque: l.s("porque") };
+  const b: BlocoOrdenar = { id: id ?? novoId("b"), tipo: "ordenar", nome: l.t("nome"), passos: l.arr("passos"), porque: l.s("porque") };
   const nota = l.sOpc("nota");
   if (nota !== undefined) b.nota = nota;
   return comExtras(b, l.fim(["id", "tipo", "nome", "passos", "porque", "nota"]));
@@ -200,19 +209,19 @@ function slideLegado(o: Obj, numTela: number, av: string[]): Slide[] {
   const tipo = o.tipo;
 
   if (tipo === "capa") {
-    const s: Slide = { id: novoId("s"), tipo: "capa", kicker: l.s("kicker"), titulo: l.s("titulo"), sub: l.s("sub") };
+    const s: Slide = { id: novoId("s"), tipo: "capa", kicker: l.t("kicker"), titulo: l.t("titulo"), sub: l.s("sub") };
     return [comExtras(s, l.fim(["tipo", "kicker", "titulo", "sub"]))];
   }
   if (tipo === "fim") {
-    const s: Slide = { id: novoId("s"), tipo: "fim", titulo: l.s("titulo"), texto: l.s("texto") };
+    const s: Slide = { id: novoId("s"), tipo: "fim", titulo: l.t("titulo"), texto: l.s("texto") };
     return [comExtras(s, l.fim(["tipo", "titulo", "texto"]))];
   }
   if (tipo !== undefined) {
     av.push(`${onde}: tipo de tela "${String(tipo)}" desconhecido; importada como tela de conteúdo.`);
   }
 
-  const kicker = l.s("kicker");
-  const titulo = l.s("titulo");
+  const kicker = l.t("kicker");
+  const titulo = l.t("titulo");
 
   // Blocos na ordem fixa do motor antigo.
   const paras = o.paras !== undefined ? l.arr("paras") : undefined;
@@ -256,7 +265,7 @@ function slideLegado(o: Obj, numTela: number, av: string[]): Slide[] {
     (modais ?? []).map((m, k) => {
       const lm = new Leitor(m, av, `${onde}, Confira ${k + 1}`);
       const id = eStr(m.id) && m.id ? m.id : novoId("b");
-      const b: Bloco = { id, tipo: "confira", botao: lm.s("botao"), titulo: lm.s("titulo"), paras: lm.arr("paras") };
+      const b: Bloco = { id, tipo: "confira", botao: lm.t("botao"), titulo: lm.t("titulo"), paras: lm.arr("paras") };
       return comExtras(b, lm.fim(["id", "botao", "titulo", "paras"]));
     });
   const bFonte = (): Bloco[] => (fonte !== undefined ? [{ id: novoId("b"), tipo: "fonte", html: fonte }] : []);
@@ -351,7 +360,7 @@ function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
       b = { id, tipo, html: l.s("html") };
       break;
     case "confira":
-      b = { id, tipo, botao: l.s("botao"), titulo: l.s("titulo"), paras: l.arr("paras") };
+      b = { id, tipo, botao: l.t("botao"), titulo: l.t("titulo"), paras: l.arr("paras") };
       break;
   }
   return comExtras(b, l.fim(["id", "tipo", ...CAMPOS_BLOCO[tipo]]));
@@ -363,12 +372,12 @@ function slideV2(o: Obj, n: number, av: string[]): Slide {
   const id = eStr(o.id) && o.id ? o.id : novoId("s");
   if (o.tipo === "capa") {
     return comExtras<Slide>(
-      { id, tipo: "capa", kicker: l.s("kicker"), titulo: l.s("titulo"), sub: l.s("sub") },
+      { id, tipo: "capa", kicker: l.t("kicker"), titulo: l.t("titulo"), sub: l.s("sub") },
       l.fim(["id", "tipo", "kicker", "titulo", "sub"]),
     );
   }
   if (o.tipo === "fim") {
-    return comExtras<Slide>({ id, tipo: "fim", titulo: l.s("titulo"), texto: l.s("texto") }, l.fim(["id", "tipo", "titulo", "texto"]));
+    return comExtras<Slide>({ id, tipo: "fim", titulo: l.t("titulo"), texto: l.s("texto") }, l.fim(["id", "tipo", "titulo", "texto"]));
   }
   if (o.tipo !== "conteudo") av.push(`${onde}: tipo de tela "${String(o.tipo)}" desconhecido; importada como tela de conteúdo.`);
   const blocos: Bloco[] = [];
@@ -383,7 +392,7 @@ function slideV2(o: Obj, n: number, av: string[]): Slide {
   });
   if (desconhecidos.length) l.extras.blocosDesconhecidos = desconhecidos;
   return comExtras<Slide>(
-    { id, tipo: "conteudo", kicker: l.s("kicker"), titulo: l.s("titulo"), blocos },
+    { id, tipo: "conteudo", kicker: l.t("kicker"), titulo: l.t("titulo"), blocos },
     l.fim(["id", "tipo", "kicker", "titulo", "blocos"]),
   );
 }

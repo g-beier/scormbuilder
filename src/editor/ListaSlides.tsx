@@ -3,7 +3,6 @@ import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { NOMES_SLIDE, type Problema, type Slide } from "../modelo/tipos";
-import { textoVisivel } from "../modelo/validar";
 import { useProjeto } from "../estado/projeto";
 import { confirmar } from "../servicos/dialogos";
 import { Icone } from "./Icones";
@@ -79,7 +78,8 @@ export function ListaSlides({ slides, problemas }: { slides: Slide[]; problemas:
 }
 
 function tituloCurto(s: Slide): string {
-  return textoVisivel(s.titulo) || "(sem título)";
+  // Título é texto simples (não HTML): mostra como está, inclusive "<" e "&".
+  return s.titulo.trim() || "(sem título)";
 }
 
 function ItemSlide({

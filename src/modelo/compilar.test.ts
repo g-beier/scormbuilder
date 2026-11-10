@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { compilarConteudo, compilarDataJs, nomePacote } from "./compilar";
 import { novoBloco, novoProjeto, novoSlide } from "./fabrica";
-import { avaliarDataJs } from "./importar";
+import { avaliarDataJs, importarDataJs } from "./importar";
+import { desescaparHtml, escaparHtml } from "./texto";
+import type { BlocoConfira, BlocoOrdenar, BlocoQuiz, SlideConteudo } from "./tipos";
 
 describe("nomePacote", () => {
   it("formato padrão", () => {
@@ -50,5 +52,101 @@ describe("compilar", () => {
     expect(Object.keys(blocos[1])).toEqual(["id", "tipo", "colunas", "cards"]);
     expect(blocos[1].cards).toEqual([{ cor: "green", breve: "b" }]);
     expect(blocos[2]).not.toHaveProperty("nota");
+  });
+});
+
+describe("escape de texto simples", () => {
+  const SUJO = 'A & B <c> "d"';
+  const ESC = "A &amp; B &lt;c&gt; &quot;d&quot;";
+
+  function projetoSujo() {
+    const p = novoProjeto({ curso: "CTGESTAO", ud: 1, atividade: "LEITURA", numero: 2, titulo: SUJO, contexto: SUJO });
+    const capa = p.slides[0] as { kicker: string; titulo: string; sub: string };
+    capa.kicker = SUJO;
+    capa.titulo = SUJO;
+    capa.sub = "<strong>rico</strong>";
+    const s = novoSlide("conteudo");
+    s.kicker = SUJO;
+    s.titulo = SUJO;
+    const conf = novoBloco("confira");
+    conf.botao = SUJO;
+    conf.titulo = SUJO;
+    conf.paras = ["<em>rico</em> &amp; já escapado"];
+    const quiz = novoBloco("quiz");
+    quiz.perguntas[0].explica = SUJO;
+    quiz.perguntas[0].pergunta = "<strong>rico</strong>";
+    const ord = novoBloco("ordenar");
+    ord.nome = SUJO;
+    const cards = novoBloco("cards");
+    cards.cards = [{ cor: "navy", titulo: SUJO, paras: ["x"] }];
+    const linha = novoBloco("linha");
+    linha.itens = [{ titulo: SUJO, texto: "t" }];
+    const contraste = novoBloco("contraste");
+    contraste.itens = [{ cor: "red", titulo: SUJO, texto: "t" }];
+    s.blocos = [conf, quiz, ord, cards, linha, contraste];
+    p.slides.splice(1, 0, s);
+    (p.slides[p.slides.length - 1] as { titulo: string }).titulo = SUJO;
+    return p;
+  }
+
+  it("escapa campos simples que vão por innerHTML e preserva explica, contexto e ricos", () => {
+    const c = compilarConteudo(projetoSujo()) as unknown as {
+      contexto: string;
+      titulo: string;
+      slides: Array<Record<string, any>>;
+    };
+    const [capa, tela, fim] = c.slides;
+    expect(capa.kicker).toBe(ESC);
+    expect(capa.titulo).toBe(ESC);
+    expect(capa.sub).toBe("<strong>rico</strong>");
+    expect(tela.kicker).toBe(ESC);
+    expect(tela.titulo).toBe(ESC);
+    const [conf, quiz, ord, cards, linha, contraste] = tela.blocos;
+    expect(conf.botao).toBe(ESC);
+    expect(conf.titulo).toBe(ESC);
+    expect(conf.paras).toEqual(["<em>rico</em> &amp; já escapado"]);
+    expect(quiz.perguntas[0].explica).toBe(SUJO); // motor usa textContent
+    expect(quiz.perguntas[0].pergunta).toBe("<strong>rico</strong>");
+    expect(ord.nome).toBe(ESC);
+    expect(cards.cards[0].titulo).toBe(ESC);
+    expect(linha.itens[0].titulo).toBe(ESC);
+    expect(contraste.itens[0].titulo).toBe(ESC);
+    expect(fim.titulo).toBe(ESC);
+    expect(c.contexto).toBe(SUJO); // textContent
+    expect(c.titulo).toBe(SUJO); // não vai pelo motor; o index.html escapa
+  });
+
+  it("importar desfaz o escape e a ida e volta é idempotente", () => {
+    const p = projetoSujo();
+    const js1 = compilarDataJs(p);
+    const { projeto: p2 } = importarDataJs(js1);
+    const tela = p2.slides[1] as SlideConteudo;
+    expect(tela.titulo).toBe(SUJO);
+    expect(tela.kicker).toBe(SUJO);
+    const conf = tela.blocos[0] as BlocoConfira;
+    expect(conf.botao).toBe(SUJO);
+    expect(conf.titulo).toBe(SUJO);
+    expect(conf.paras).toEqual(["<em>rico</em> &amp; já escapado"]);
+    expect((tela.blocos[1] as BlocoQuiz).perguntas[0].explica).toBe(SUJO);
+    expect((tela.blocos[2] as BlocoOrdenar).nome).toBe(SUJO);
+    expect(compilarDataJs(p2)).toBe(js1);
+  });
+
+  it("legado: título com entidade vira texto puro no projeto", () => {
+    const { projeto } = importarDataJs(
+      `window.CONTEUDO = { contexto: "c", slides: [
+        { tipo: "capa", kicker: "k", titulo: "P &amp; D", sub: "s" },
+        { kicker: "K &lt;1&gt;", titulo: "T", modais: [{ id: "m-1", botao: "Ver &amp; ler", titulo: "t", paras: ["x"] }] },
+        { tipo: "fim", titulo: "Fim", texto: "t" } ] };`,
+    );
+    expect(projeto.slides[0]).toMatchObject({ titulo: "P & D" });
+    expect(projeto.meta.titulo).toBe("P & D");
+    const s = projeto.slides[1] as SlideConteudo;
+    expect(s.kicker).toBe("K <1>");
+    expect((s.blocos[0] as BlocoConfira).botao).toBe("Ver & ler");
+  });
+
+  it("texto que já contém entidade literal sobrevive à ida e volta", () => {
+    expect(desescaparHtml(escaparHtml("&amp; e &lt;"))).toBe("&amp; e &lt;");
   });
 });
