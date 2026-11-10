@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { BlocoCards } from "../../modelo/tipos";
-import { CampoRico, CampoTexto, ListaDeTextos, ListaEditavel, moverItem, SeletorCor } from "../campos";
+import { CampoRico, CampoTexto, ListaDeTextos, ListaEditavel, moverItem } from "../campos";
 import { opsTextos, type PropsFormBloco } from "./comum";
 
 export function FormCards(p: PropsFormBloco<BlocoCards>) {
@@ -31,17 +31,12 @@ export function FormCards(p: PropsFormBloco<BlocoCards>) {
         textoAdicionar="Adicionar cartão"
         minimo={1}
         foco={f("cards")}
+        // Os cartões não têm cor no visual aprovado (só a Comparação usa cores): a cor fica fixa
         aoAdicionar={() => editar((b) => void b.cards.push({ cor: "navy", titulo: "", paras: [""] }))}
         aoRemover={(i) => editar((b) => void b.cards.splice(i, 1))}
         aoMover={(de, para) => editar((b) => moverItem(b.cards, de, para))}
         render={(c, i) => (
           <div data-foco={f(`cards[${i}]`)} tabIndex={-1} className="grupo-campos">
-            <SeletorCor
-              rotulo="Cor do cartão"
-              valor={c.cor}
-              foco={f(`cards[${i}].cor`)}
-              aoMudar={(cor) => editar((b) => void (b.cards[i].cor = cor))}
-            />
             <CampoTexto
               rotulo="Título do cartão"
               ajuda="Aparece em negrito no alto do cartão."
