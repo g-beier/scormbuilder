@@ -344,3 +344,59 @@ h1, h2, h3, .kicker, .topo-h1, .eyebrow, .flow-name, .tl-n, .progresso-texto, bu
 .ram-resumo li { margin: 0 0 8px; }
 .ram-resumo-p { display: block; color: var(--tinta-suave); font-size: 14px; line-height: 1.45; }
 .ram-resumo-r { display: block; color: var(--navy); }
+
+/* ---------- Impressão (M7): a leitura numa página corrida, para salvar em PDF ----------
+   Ativado por Motor.imprimir (classe .impressao em <html> e <body>). Não afeta o pacote. */
+@page { size: A4; margin: 16mm 14mm; }
+html.impressao { height: auto; overflow: visible; }
+body.impressao {
+  position: static; overflow: visible; display: block; height: auto; background: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.imp-doc { max-width: 820px; margin: 0 auto; padding: 28px 24px 48px; }
+.imp-cab { padding-bottom: 14px; margin-bottom: 8px; border-bottom: 4px solid var(--navy); }
+.imp-contexto { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--amarelo-texto); }
+.imp-cab h1 { margin-bottom: 6px; }
+.imp-cab .cover-sub { margin: 0 0 12px; }
+.imp-registro { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-top: 12px; }
+.imp-registro p { display: flex; align-items: flex-end; gap: 8px; flex: 1 1 240px; margin: 0; font-weight: 600; color: var(--navy); }
+.imp-campo { flex: 1; min-width: 120px; border-bottom: 1px solid var(--tinta-suave); height: 1.3em; }
+.imp-tela { margin-top: 26px; }
+.imp-tela-tit { font-size: 1.35rem; color: var(--navy); margin: 0 0 10px; break-after: avoid; page-break-after: avoid; }
+.imp-tela .kicker { break-after: avoid; page-break-after: avoid; }
+.imp-caixa {
+  flex: none; display: inline-block; width: 15px; height: 15px; margin-top: 4px;
+  border: 1.5px solid var(--navy); border-radius: 3px; background: #fff;
+}
+.imp-opcoes { list-style: none; margin: 6px 0 0; padding: 0; }
+.imp-opcoes li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 10px; margin: 6px 0; }
+.imp-op-txt { flex: 1 1 60%; min-width: 0; }
+.imp-destino { flex: none; margin-left: 25px; width: 100%; font-size: 13px; font-weight: 600; color: var(--navy-3); }
+.imp-numerar { list-style: none; margin: 4px 0 0; padding: 0; }
+.imp-numerar li { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; padding: 8px 10px; border: 1px solid var(--linha); border-radius: 8px; }
+.imp-num { flex: none; width: 34px; height: 26px; border: 1.5px solid var(--navy); border-radius: 6px; }
+.imp-confira { margin: 14px 0; padding: 12px 16px; border: 1px solid var(--linha); border-left: 6px solid var(--amarelo); border-radius: var(--raio); background: #fff; }
+.imp-confira h3 { margin-top: 0; color: var(--navy); }
+.imp-confira-ref { margin: 12px 0; padding: 8px 12px; border-left: 4px solid var(--amarelo); background: var(--amarelo-tinta); font-size: 14px; }
+.imp-anexo { break-before: page; page-break-before: always; }
+.imp-anexo-ref { float: left; margin: 0 8px 0 0; font-weight: 700; color: var(--navy); }
+.imp-linhas { margin-top: 10px; }
+.imp-linhas div { height: 30px; border-bottom: 1px solid #a7a9bd; }
+.imp-tabela { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 15px; }
+.imp-tabela th, .imp-tabela td { border: 1px solid var(--linha); padding: 8px 10px; text-align: left; vertical-align: top; }
+.imp-tabela th { background: var(--navy-tinta); color: var(--navy); }
+.imp-tabela .imp-cel { text-align: center; width: 1%; white-space: nowrap; }
+.imp-ram-q { margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed var(--linha); }
+.imp-ram-q:first-of-type { border-top: 0; padding-top: 0; }
+.imp-erro { margin: 32px; font-weight: 600; color: var(--vermelho); }
+.imp-doc .card, .imp-doc .quiz-q, .imp-doc .bloco-q, .imp-doc .flow-block, .imp-doc .tl-row, .imp-doc .callout,
+.imp-doc .imp-confira, .imp-doc .imp-ram-q, .imp-doc .imp-tabela tr, .imp-numerar li { break-inside: avoid; page-break-inside: avoid; }
+/* Blocos longos (questionário com caminhos, tabelas, sequências) podem quebrar entre páginas;
+   só as perguntas e as linhas ficam inteiras. O título da tela fica junto do início do bloco. */
+.imp-doc .bloco-q.ramificado, .imp-doc .bloco-q:has(.imp-tabela), .imp-doc .flow-block:has(.imp-numerar) { break-inside: auto; page-break-inside: auto; }
+.imp-tela-tit + *, .imp-tela .kicker + .imp-tela-tit { break-before: avoid; page-break-before: avoid; }
+@media print {
+  .imp-barra { display: none !important; }
+  .imp-doc { max-width: none; padding: 0; }
+  .imp-doc a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 12px; word-break: break-all; color: var(--tinta-suave); }
+}
