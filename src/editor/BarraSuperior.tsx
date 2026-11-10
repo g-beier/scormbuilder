@@ -13,6 +13,7 @@ export function BarraSuperior({
   aoAbrirDados,
   aoIrProblema,
   aoSalvarComo,
+  aoExportar,
   aoInicio,
 }: {
   projeto: Projeto;
@@ -20,6 +21,7 @@ export function BarraSuperior({
   aoAbrirDados(): void;
   aoIrProblema(p: Problema): void;
   aoSalvarComo(): void;
+  aoExportar(): void;
   aoInicio(): void;
 }) {
   const atualizarMeta = useProjeto((s) => s.atualizarMeta);
@@ -90,18 +92,9 @@ export function BarraSuperior({
         <button type="button" className="btn btn-salvar-como" onClick={aoSalvarComo} title="Salvar como…">
           <Icone nome="salvar" /> <span className="rotulo-largo">Salvar como…</span>
         </button>
-        <button
-          type="button"
-          className="btn btn-primario"
-          aria-disabled="true"
-          aria-describedby={`${idTitulo}-exportar`}
-          onClick={(e) => e.preventDefault()}
-        >
+        <button type="button" className="btn btn-primario" onClick={aoExportar}>
           <Icone nome="exportar" /> Exportar
         </button>
-        <span id={`${idTitulo}-exportar`} className="dica-em-breve">
-          em breve
-        </span>
       </div>
     </header>
   );

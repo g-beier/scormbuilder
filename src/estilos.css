@@ -805,14 +805,6 @@ legend {
   align-items: center;
   gap: 4px;
 }
-.dica-em-breve {
-  white-space: nowrap;
-  font-size: 0.75rem;
-  color: var(--texto-suave);
-  background: var(--selecao);
-  padding: 2px 6px;
-  border-radius: 999px;
-}
 .indicador-salvamento {
   /* Pode encolher (com reticências) para a barra caber; o texto inteiro fica no title. */
   flex: 0 1 auto;

@@ -32,6 +32,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../runtime/index.html": "runtime/index.html",
+      "../runtime/css/*.css": "runtime/css/",
+      "../runtime/js/*.js": "runtime/js/",
+      "../runtime/fonts/*.woff2": "runtime/fonts/",
+      "../runtime/fonts/LICENSE-*.txt": "runtime/fonts/"
+    }
   }
 }
