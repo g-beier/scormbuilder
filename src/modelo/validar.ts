@@ -1,6 +1,8 @@
 import {
   CORES,
+  MAX_CHARS_REFLEXAO,
   NOMES_BLOCO,
+  PADRAO_REFLEXAO,
   type Bloco,
   type Problema,
   type Projeto,
@@ -83,6 +85,26 @@ export function textosDoBloco(b: Bloco): Array<[campo: string, html: string]> {
       out.push(["titulo", b.titulo]);
       lista("paras", b.paras);
       break;
+    case "multipla":
+      out.push(["enunciado", b.enunciado]);
+      b.opcoes.forEach((o, i) => {
+        out.push([`opcoes[${i}].texto`, o.texto]);
+        out.push([`opcoes[${i}].fb`, o.fb]);
+      });
+      if (b.msgAcerto !== undefined) out.push(["msgAcerto", b.msgAcerto]);
+      if (b.msgRevisar !== undefined) out.push(["msgRevisar", b.msgRevisar]);
+      break;
+    case "reflexao":
+      out.push(["pergunta", b.pergunta]);
+      if (b.aviso !== undefined) out.push(["aviso", b.aviso]);
+      break;
+    case "escolha":
+      out.push(["pergunta", b.pergunta]);
+      b.opcoes.forEach((o, i) => {
+        out.push([`opcoes[${i}].texto`, o.texto]);
+        out.push([`opcoes[${i}].retorno`, o.retorno]);
+      });
+      break;
   }
   return out;
 }
@@ -101,7 +123,10 @@ function textosDoSlide(s: Slide): Array<[string, string]> {
 /**
  * Estimativa conservadora do tamanho do suspend_data: supõe que o motor
  * guarda, por id, cada tela visitada, cada pergunta respondida (com índice),
- * cada fluxo de ordenar concluído e cada Confira aberto.
+ * cada fluxo de ordenar concluído e cada Confira aberto. Múltipla escolha
+ * guarda os índices marcados (≈ 2 caracteres por alternativa + colchetes),
+ * reflexão guarda 1 (enviada) e escolha com retorno o índice escolhido;
+ * para esses dois, 8 caracteres de folga.
  */
 export function estimarSuspendData(projeto: Projeto): number {
   let n = 60; // envelope JSON, chaves e lesson_location
@@ -111,6 +136,8 @@ export function estimarSuspendData(projeto: Projeto): number {
     for (const b of s.blocos) {
       if (b.tipo === "quiz") n += b.perguntas.length * (b.id.length + 10);
       else if (b.tipo === "ordenar" || b.tipo === "confira") n += b.id.length + 4;
+      else if (b.tipo === "multipla") n += b.id.length + 4 + 2 * (b.opcoes?.length ?? 0) + 4;
+      else if (b.tipo === "reflexao" || b.tipo === "escolha") n += b.id.length + 4 + 8;
     }
   }
   return n;
@@ -316,6 +343,55 @@ export function validar(projeto: Projeto): Problema[] {
         if (vazioSimples(b.titulo)) erro("titulo", "falta o título da janela.");
         listaObrigatoria("paras", b.paras, "escreva o texto que aparece ao abrir.", "o parágrafo {n} está vazio.");
         break;
+      case "multipla": {
+        if (vazio(b.enunciado)) erro("enunciado", "falta o enunciado.");
+        const opcoes = b.opcoes ?? [];
+        if (opcoes.length < 2) erro("opcoes", "são necessárias pelo menos 2 alternativas.");
+        opcoes.forEach((o, k) => vazio(o.texto) && erro(`opcoes[${k}].texto`, `a alternativa ${k + 1} está vazia.`));
+        if (opcoes.length > 0 && !opcoes.some((o) => o.correta === true)) {
+          erro(`opcoes[0].correta`, "marque pelo menos uma alternativa como correta.");
+        }
+        // Comentário vazio é aviso: o pacote funciona (o aluno ainda vê “Errado.”
+        // ou “Faltou marcar esta.”), mas perde a explicação daquela alternativa.
+        const semFb = opcoes.map((o, k) => (vazioSimples(o.fb) ? k : -1)).filter((k) => k >= 0);
+        if (semFb.length) {
+          const quais = juntar(semFb.map((k) => String(k + 1)));
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: `opcoes[${semFb[0]}].fb`,
+            mensagem:
+              semFb.length === 1
+                ? `${tela(i)}: no bloco “${nome}”, a alternativa ${quais} está sem comentário. Escreva o que o aluno deve ler ao verificar a resposta.`
+                : `${tela(i)}: no bloco “${nome}”, as alternativas ${quais} estão sem comentário. Escreva o que o aluno deve ler ao verificar a resposta.`,
+          });
+        }
+        break;
+      }
+      case "reflexao": {
+        if (vazio(b.pergunta)) erro("pergunta", "falta a pergunta para reflexão.");
+        const min = b.minChars ?? PADRAO_REFLEXAO.minChars;
+        const max = b.maxChars ?? PADRAO_REFLEXAO.maxChars;
+        const minOk = Number.isInteger(min) && min >= 1;
+        const maxOk = Number.isInteger(max) && max >= 1 && max <= MAX_CHARS_REFLEXAO;
+        if (!minOk) erro("minChars", "o “Mínimo de caracteres” precisa ser um número inteiro de 1 para cima.");
+        if (!Number.isInteger(max) || max < 1) erro("maxChars", "o “Máximo de caracteres” precisa ser um número inteiro de 1 para cima.");
+        else if (max > MAX_CHARS_REFLEXAO)
+          erro("maxChars", `o “Máximo de caracteres” passa de ${MAX_CHARS_REFLEXAO}, o limite que o Moodle registra com segurança. Use até ${MAX_CHARS_REFLEXAO}.`);
+        if (minOk && maxOk && min > max) erro("minChars", "o “Mínimo de caracteres” é maior que o “Máximo”. Diminua o mínimo ou aumente o máximo.");
+        break;
+      }
+      case "escolha": {
+        if (vazio(b.pergunta)) erro("pergunta", "falta a pergunta.");
+        const opcoes = b.opcoes ?? [];
+        if (opcoes.length < 2) erro("opcoes", "são necessárias pelo menos 2 alternativas.");
+        opcoes.forEach((o, k) => {
+          if (vazio(o.texto)) erro(`opcoes[${k}].texto`, `a alternativa ${k + 1} está vazia.`);
+          if (vazioSimples(o.retorno)) erro(`opcoes[${k}].retorno`, `falta o retorno da alternativa ${k + 1}.`);
+        });
+        break;
+      }
       default:
         erro(undefined, `o tipo de bloco “${(b as { tipo: string }).tipo}” não é conhecido. Exclua este bloco.`);
     }

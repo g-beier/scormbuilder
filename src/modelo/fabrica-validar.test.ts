@@ -44,6 +44,23 @@ function blocoValido(tipo: Bloco["tipo"]): Bloco {
     case "confira":
       Object.assign(b, { titulo: "Confira: x", paras: ["Resposta"] });
       break;
+    case "multipla":
+      b.enunciado = "Marque as corretas.";
+      b.opcoes = [
+        { texto: "A", correta: true, fb: "Sim." },
+        { texto: "B", correta: false, fb: "Não." },
+      ];
+      break;
+    case "reflexao":
+      b.pergunta = "O que você faria?";
+      break;
+    case "escolha":
+      b.pergunta = "Como você se sente?";
+      b.opcoes = [
+        { texto: "Seguro", retorno: "Ótimo." },
+        { texto: "Inseguro", retorno: "Revise a seção 2." },
+      ];
+      break;
   }
   return b;
 }
@@ -84,6 +101,11 @@ describe("fábrica", () => {
     expect(q.perguntas).toHaveLength(1);
     expect(q.perguntas[0].opcoes).toEqual(["", ""]);
     expect(novoBloco("cards").cards[0].cor).toBe("navy");
+    const m = novoBloco("multipla");
+    expect(m.opcoes).toEqual([{ texto: "", correta: false, fb: "" }, { texto: "", correta: false, fb: "" }]);
+    expect(m).not.toHaveProperty("msgAcerto");
+    expect(novoBloco("reflexao")).toEqual({ id: expect.stringMatching(/^b-/), tipo: "reflexao", pergunta: "" });
+    expect(novoBloco("escolha").opcoes).toEqual([{ texto: "", retorno: "" }, { texto: "", retorno: "" }]);
   });
 
   it("um bloco de cada tipo, preenchido, é válido", () => {
@@ -130,6 +152,21 @@ describe("validar: erros", () => {
     ["ordenar sem porquê", (p) => bl(p, "ordenar", (b) => (b.porque = "")), /Por que esta ordem/],
     ["pergunta sem explicação", (p) => bl(p, "quiz", (b) => (b.perguntas[0].explica = "")), /explicação da resposta/],
     ["fim sem texto", (p) => ((p.slides[2] as { texto: string }).texto = ""), /falta a mensagem final/],
+    ["multipla sem enunciado", (p) => bl(p, "multipla", (b) => (b.enunciado = "<p> </p>")), /“Múltipla escolha”, falta o enunciado/],
+    ["multipla com 1 alternativa", (p) => bl(p, "multipla", (b) => b.opcoes.splice(1)), /pelo menos 2 alternativas/],
+    ["multipla sem correta", (p) => bl(p, "multipla", (b) => (b.opcoes[0].correta = false)), /marque pelo menos uma alternativa como correta/],
+    ["multipla alternativa vazia", (p) => bl(p, "multipla", (b) => (b.opcoes[1].texto = "")), /“Múltipla escolha”, a alternativa 2 está vazia/],
+    ["reflexao sem pergunta", (p) => bl(p, "reflexao", (b) => (b.pergunta = "")), /falta a pergunta para reflexão/],
+    ["reflexao min > max", (p) => bl(p, "reflexao", (b) => Object.assign(b, { minChars: 300, maxChars: 200 })), /Mínimo de caracteres” é maior/],
+    ["reflexao min > padrão do max", (p) => bl(p, "reflexao", (b) => (b.minChars = 600)), /Mínimo de caracteres” é maior/],
+    ["reflexao max > 2000", (p) => bl(p, "reflexao", (b) => (b.maxChars = 2001)), /passa de 2000/],
+    ["reflexao min < 1", (p) => bl(p, "reflexao", (b) => (b.minChars = 0)), /“Mínimo de caracteres” precisa ser um número inteiro/],
+    ["reflexao min fracionário", (p) => bl(p, "reflexao", (b) => (b.minChars = 2.5)), /“Mínimo de caracteres” precisa ser/],
+    ["reflexao max < 1", (p) => bl(p, "reflexao", (b) => (b.maxChars = 0)), /“Máximo de caracteres” precisa ser/],
+    ["escolha sem pergunta", (p) => bl(p, "escolha", (b) => (b.pergunta = "")), /“Escolha com retorno”, falta a pergunta\./],
+    ["escolha com 1 alternativa", (p) => bl(p, "escolha", (b) => b.opcoes.pop()), /“Escolha com retorno”, são necessárias pelo menos 2/],
+    ["escolha alternativa vazia", (p) => bl(p, "escolha", (b) => (b.opcoes[0].texto = "")), /a alternativa 1 está vazia/],
+    ["escolha sem retorno", (p) => bl(p, "escolha", (b) => (b.opcoes[1].retorno = " ")), /falta o retorno da alternativa 2/],
     ["id duplicado", (p) => (conteudo(p).blocos[1].id = conteudo(p).blocos[0].id), /corrompido ou repetido/],
   ];
 
@@ -198,6 +235,50 @@ describe("validar: avisos", () => {
     const p = projetoValido();
     bl(p, "cards", (b) => (b.cards = [{ cor: "navy", paras: [""] }]));
     expect(erros(p).map((e) => e.mensagem)).toEqual(["Tela 2: no bloco “Cartões”, o cartão 1 está vazio."]);
+  });
+
+  it("multipla: comentário vazio é aviso (um só, por bloco), não erro", () => {
+    const p = projetoValido();
+    bl(p, "multipla", (b) => {
+      b.opcoes[0].fb = "";
+      b.opcoes.push({ texto: "C", correta: false, fb: " " });
+    });
+    expect(erros(p)).toEqual([]);
+    const a = avisos(p);
+    expect(a.map((x) => x.mensagem)).toEqual([
+      "Tela 2: no bloco “Múltipla escolha”, as alternativas 1 e 3 estão sem comentário. Escreva o que o aluno deve ler ao verificar a resposta.",
+    ]);
+    expect(a[0].campo).toBe("opcoes[0].fb");
+    bl(p, "multipla", (b) => (b.opcoes[2].fb = "ok"));
+    expect(avisos(p).map((x) => x.mensagem)[0]).toMatch(/a alternativa 1 está sem comentário/);
+  });
+
+  it("reflexao: limites no padrão e no máximo permitido são válidos", () => {
+    const p = projetoValido();
+    bl(p, "reflexao", (b) => Object.assign(b, { minChars: 1, maxChars: 2000, opcional: false, aviso: "" }));
+    expect(validar(p)).toEqual([]);
+    bl(p, "reflexao", (b) => Object.assign(b, { minChars: 50, maxChars: 50 }));
+    expect(validar(p)).toEqual([]);
+  });
+
+  it("reflexao: min fora do intervalo não gera também “mínimo maior que máximo”", () => {
+    const p = projetoValido();
+    bl(p, "reflexao", (b) => Object.assign(b, { minChars: 0, maxChars: 3000 }));
+    expect(erros(p).map((e) => e.campo)).toEqual(["minChars", "maxChars"]);
+  });
+
+  it("suspend_data conta os tipos novos", () => {
+    const p = projetoValido();
+    const base = estimarSuspendData(p);
+    const s = novoSlide("conteudo");
+    s.titulo = "x";
+    const m = blocoValido("multipla");
+    s.blocos = [m];
+    p.slides.splice(1, 0, s);
+    const comM = estimarSuspendData(p);
+    expect(comM - base).toBe(s.id.length + 4 + m.id.length + 4 + 2 * 2 + 4);
+    s.blocos.push(blocoValido("reflexao"), blocoValido("escolha"));
+    expect(estimarSuspendData(p) - comM).toBe(2 * (10 + 4 + 8));
   });
 
   it("campo simples com “<” não conta como vazio", () => {

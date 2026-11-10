@@ -418,13 +418,15 @@ var Motor = (function () {
       }
       // Setas dentro de um card arrastável movem o card, não trocam de tela
       if (e.target.closest && e.target.closest(".drag-list")) return;
+      // Setas em campos de formulário (texto, opções) ficam com o campo
+      if (e.target.closest && e.target.closest("input, textarea, select")) return;
       if (e.key === "ArrowRight" || e.key === "PageDown") show(current + 1);
       if (e.key === "ArrowLeft" || e.key === "PageUp") show(current - 1);
     });
 
     var tx = null;
     stage.addEventListener("touchstart", function (e) {
-      tx = e.target.closest && e.target.closest(".drag-list") ? null : e.changedTouches[0].clientX;
+      tx = e.target.closest && e.target.closest(".drag-list, textarea") ? null : e.changedTouches[0].clientX;
     }, { passive: true });
     stage.addEventListener("touchend", function (e) {
       if (tx === null) return;
@@ -805,6 +807,301 @@ var Motor = (function () {
     pendentes: function (b, ctx) { return ctx.ok ? 0 : 1; },
     estado: function (b, ctx) { return ctx.ok ? 1 : undefined; },
     restaurar: function (b, ctx, valor) { if (valor) ctx.ok = true; }
+  });
+
+  // =====================================================================
+  // Blocos do kit (M6): múltipla seleção, reflexão e escolha com retorno.
+  // Portados de ead-scorm/base/scorm-kit/js/kit.js (Kit.quiz, Kit.reflexao, Kit.escolha).
+  // Campos "html" vão por innerHTML; campos de texto puro (fb, retorno, aviso,
+  // msgAcerto, msgRevisar) vão por textContent.
+  // =====================================================================
+
+  function texto(tag, cls, t) {
+    var e = el(tag, cls);
+    e.textContent = t == null ? "" : String(t);
+    return e;
+  }
+
+  function botao(cls, rotulo) {
+    var bt = texto("button", cls, rotulo);
+    bt.type = "button";
+    return bt;
+  }
+
+  // Caixa com a pergunta/enunciado; devolve { box, id } (id do enunciado, para aria-labelledby)
+  function caixaPergunta(ctx, cls, html) {
+    var box = el("div", "bloco-q " + cls);
+    var id = "kq" + ctx.seq("kit");
+    var p = el("p", "bloco-perg", html || "");
+    p.id = id;
+    box.appendChild(p);
+    return { box: box, id: id };
+  }
+
+  // ---------- Múltipla seleção, com retorno por alternativa (Kit.quiz) ----------
+  var MSG_ACERTO = "Muito bem: sua resposta coincide com o esperado.";
+  var MSG_REVISAR = "Alguns pontos merecem revisão. Veja os comentários nas alternativas.";
+
+  function aplicarMultipla(b, ui, marcadas) {
+    var tudoCerto = true;
+    ui.ops.forEach(function (op, i) {
+      var o = (b.opcoes || [])[i] || {};
+      var correta = o.correta === true;
+      var marcado = marcadas.indexOf(i) >= 0;
+      var fbTxt = o.fb == null ? "" : String(o.fb);
+      op.inp.checked = marcado;
+      op.inp.disabled = true;
+      op.lab.classList.remove("ok", "erro");
+      op.lab.classList.add("travada");
+      op.fb.hidden = true;
+      if (marcado === correta) {
+        if (correta) {
+          op.lab.classList.add("ok");
+          op.fb.textContent = fbTxt;
+          op.fb.hidden = !fbTxt;
+        }
+      } else {
+        tudoCerto = false;
+        op.lab.classList.add("erro");
+        op.fb.textContent = (correta ? "Faltou marcar esta. " : "Errado. ") + fbTxt;
+        op.fb.hidden = false;
+      }
+    });
+    ui.res.innerHTML = "";
+    ui.res.appendChild(tudoCerto
+      ? texto("div", "resultado bom", b.msgAcerto || MSG_ACERTO)
+      : texto("div", "resultado parcial", b.msgRevisar || MSG_REVISAR));
+    ui.ver.hidden = true;
+    ui.ref.hidden = false;
+  }
+
+  bloco("multipla", {
+    aviso: "Verifique suas respostas para avançar.",
+    falta: ["pergunta de múltipla escolha ainda não verificada", "perguntas de múltipla escolha ainda não verificadas"],
+    ordemAviso: 4,
+    ordemFalta: 4,
+    render: function (b, ctx) {
+      ctx.marcadas = null;   // índices marcados na última verificação (null = nunca verificou)
+      var cx = caixaPergunta(ctx, "multipla", b.enunciado);
+      var grupo = el("div", "opcoes");
+      grupo.setAttribute("role", "group");
+      grupo.setAttribute("aria-labelledby", cx.id);
+      var ops = [];
+      (b.opcoes || []).forEach(function (o) {
+        var lab = el("label", "opcao");
+        var inp = el("input");
+        inp.type = "checkbox";
+        lab.appendChild(inp);
+        lab.appendChild(el("span", "opcao-txt", o.texto || ""));
+        var fb = el("span", "fb");
+        fb.hidden = true;
+        lab.appendChild(fb);
+        grupo.appendChild(lab);
+        ops.push({ lab: lab, inp: inp, fb: fb });
+      });
+      cx.box.appendChild(grupo);
+      var res = el("div", "quiz-resultado");
+      res.setAttribute("aria-live", "polite");
+      cx.box.appendChild(res);
+      var acoes = el("div", "acoes");
+      var ver = botao("btn-act", "Verificar respostas");
+      var ref = botao("btn-act sec", "Tentar de novo");
+      ref.hidden = true;
+      acoes.appendChild(ver);
+      acoes.appendChild(ref);
+      cx.box.appendChild(acoes);
+      ctx.ui = { ops: ops, res: res, ver: ver, ref: ref };
+
+      ver.addEventListener("click", function () {
+        var marcadas = [];
+        ops.forEach(function (op, i) { if (op.inp.checked) marcadas.push(i); });
+        if (!marcadas.length) {
+          res.innerHTML = "";
+          res.appendChild(texto("div", "resultado parcial", "Marque ao menos uma alternativa antes de verificar."));
+          return;
+        }
+        ctx.marcadas = marcadas;
+        aplicarMultipla(b, ctx.ui, marcadas);
+        ref.focus();
+        ctx.mudou();
+      });
+
+      ref.addEventListener("click", function () {
+        ops.forEach(function (op) {
+          op.inp.disabled = false;
+          op.lab.classList.remove("ok", "erro", "travada");
+          op.fb.hidden = true;
+        });
+        res.innerHTML = "";
+        ver.hidden = false;
+        ref.hidden = true;
+        ver.focus();
+      });
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (ctx.marcadas || !ctx.ui.ops.length) ? 0 : 1; },
+    estado: function (b, ctx) { return ctx.marcadas ? ctx.marcadas.slice() : undefined; },
+    restaurar: function (b, ctx, valor) {
+      if (!valor || !valor.length) return;
+      var n = ctx.ui.ops.length, m = [];
+      valor.forEach(function (v) { if (typeof v === "number" && v >= 0 && v < n && m.indexOf(v) < 0) m.push(v); });
+      if (!m.length) return;
+      ctx.marcadas = m;
+      aplicarMultipla(b, ctx.ui, m);
+    }
+  });
+
+  // ---------- Reflexão com envio ao LMS (Kit.reflexao) ----------
+  var AVISO_REFLEXAO = "Ao enviar, sua reflexão é registrada na plataforma e pode ser lida pela equipe do curso. Não escreva nomes nem dados que identifiquem crianças, famílias ou casos reais. Depois de enviada, ela não pode ser editada; se você sair desta tela sem enviar, o texto é descartado.";
+  var MSG_ENVIADA = "✓ Reflexão enviada. Obrigado por compartilhar.";
+
+  function limparTexto(t) { return String(t).replace(/\s+/g, " ").replace(/^ | $/g, ""); }
+
+  function mostrarEnviada(ui, manterTexto) {
+    ui.ta.readOnly = true;
+    ui.btn.hidden = true;
+    ui.cont.hidden = true;
+    if (ui.aviso) ui.aviso.hidden = true;
+    if (!manterTexto) { ui.rot.hidden = true; ui.ta.hidden = true; }
+    ui.status.innerHTML = "";
+    ui.status.appendChild(texto("p", "enviada", MSG_ENVIADA));
+  }
+
+  bloco("reflexao", {
+    aviso: "Envie sua reflexão para avançar.",
+    falta: ["reflexão ainda não enviada", "reflexões ainda não enviadas"],
+    ordemAviso: 6,
+    ordemFalta: 6,
+    render: function (b, ctx) {
+      ctx.ok = false;
+      var MIN = b.minChars > 0 ? b.minChars : 10;
+      var MAX = b.maxChars > 0 ? b.maxChars : 500;
+      var opcional = b.opcional !== false;
+      var cx = caixaPergunta(ctx, "reflexao", b.pergunta);
+      var n = cx.id;
+      var rot = texto("label", "nota refl-rotulo", "Escreva sua reflexão" + (opcional ? " (opcional)" : "") + ".");
+      rot.id = n + "r";
+      rot.setAttribute("for", n + "t");
+      var ta = el("textarea");
+      ta.id = n + "t";
+      ta.rows = 4;
+      ta.maxLength = MAX;
+      ta.setAttribute("aria-labelledby", cx.id + " " + rot.id);
+      var cont = texto("p", "nota refl-cont", "");
+      cont.id = n + "c";
+      var avisoTxt = b.aviso == null ? AVISO_REFLEXAO : String(b.aviso);
+      var aviso = null;
+      if (avisoTxt) {
+        aviso = texto("p", "nota aviso-refl", avisoTxt);
+        aviso.id = n + "a";
+      }
+      ta.setAttribute("aria-describedby", cont.id + (aviso ? " " + aviso.id : ""));
+      var acoes = el("div", "acoes");
+      var btn = botao("btn-act", "Enviar reflexão");
+      btn.disabled = true;
+      acoes.appendChild(btn);
+      var status = el("div", "refl-status");
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      status.tabIndex = -1;
+      [rot, ta, cont, aviso, acoes, status].forEach(function (x) { if (x) cx.box.appendChild(x); });
+      ctx.ui = { rot: rot, ta: ta, cont: cont, aviso: aviso, btn: btn, status: status };
+
+      function contar() {
+        var bruto = ta.value.length, util = limparTexto(ta.value).length;
+        cont.textContent = bruto + "/" + MAX + (util < MIN ? " · mínimo de " + MIN + " caracteres" : "");
+        btn.disabled = util < MIN;
+      }
+      contar();
+      ta.addEventListener("input", contar);
+
+      btn.addEventListener("click", function () {
+        if (ctx.ok || limparTexto(ta.value).length < MIN) return;
+        var gravou = false;
+        try { gravou = window.Scorm.gravarResposta(b.id, ta.value); } catch (e) { gravou = false; }
+        if (!gravou) {
+          status.innerHTML = "";
+          status.appendChild(texto("div", "resultado parcial", "Não foi possível enviar agora. Seu texto continua na tela: tente novamente."));
+          return;
+        }
+        ctx.ok = true;
+        mostrarEnviada(ctx.ui, true);
+        status.focus();
+        ctx.mudou();
+      });
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (b.opcional === false && !ctx.ok) ? 1 : 0; },
+    estado: function (b, ctx) { return ctx.ok ? 1 : undefined; },
+    restaurar: function (b, ctx, valor) {
+      if (!valor) return;
+      ctx.ok = true;
+      mostrarEnviada(ctx.ui, false);
+    }
+  });
+
+  // ---------- Escolha com retorno, sem gabarito (Kit.escolha) ----------
+  function aplicarEscolha(b, ui, i) {
+    ui.ops.forEach(function (op, k) {
+      op.inp.checked = (k === i);
+      op.lab.classList.toggle("escolhida", k === i);
+    });
+    var o = (b.opcoes || [])[i];
+    ui.ret.innerHTML = "";
+    if (o) {
+      var card = el("div", "card pergunta");
+      card.appendChild(texto("h3", null, "Retorno"));
+      card.appendChild(texto("p", null, o.retorno));
+      ui.ret.appendChild(card);
+    } else {
+      ui.ret.appendChild(texto("p", "nota", "Escolha uma alternativa para ver o retorno."));
+    }
+  }
+
+  bloco("escolha", {
+    aviso: "Escolha uma alternativa para avançar.",
+    falta: ["escolha ainda não feita", "escolhas ainda não feitas"],
+    ordemAviso: 5,
+    ordemFalta: 5,
+    render: function (b, ctx) {
+      ctx.escolha = null;
+      var cx = caixaPergunta(ctx, "escolha", b.pergunta);
+      var grupo = el("div", "opcoes");
+      grupo.setAttribute("role", "radiogroup");
+      grupo.setAttribute("aria-labelledby", cx.id);
+      var ops = [];
+      (b.opcoes || []).forEach(function (o, i) {
+        var lab = el("label", "opcao");
+        var inp = el("input");
+        inp.type = "radio";
+        inp.name = cx.id;
+        inp.value = String(i);
+        lab.appendChild(inp);
+        lab.appendChild(el("span", "opcao-txt", o.texto || ""));
+        grupo.appendChild(lab);
+        ops.push({ lab: lab, inp: inp });
+        inp.addEventListener("change", function () {
+          if (!inp.checked) return;
+          ctx.escolha = i;
+          aplicarEscolha(b, ctx.ui, i);
+          ctx.mudou();
+        });
+      });
+      cx.box.appendChild(grupo);
+      var ret = el("div", "escolha-retorno");
+      ret.setAttribute("aria-live", "polite");
+      cx.box.appendChild(ret);
+      ctx.ui = { ops: ops, ret: ret };
+      aplicarEscolha(b, ctx.ui, -1);
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (ctx.escolha == null && ctx.ui.ops.length) ? 1 : 0; },
+    estado: function (b, ctx) { return ctx.escolha == null ? undefined : ctx.escolha; },
+    restaurar: function (b, ctx, valor) {
+      if (typeof valor !== "number" || !ctx.ui.ops[valor]) return;
+      ctx.escolha = valor;
+      aplicarEscolha(b, ctx.ui, valor);
+    }
   });
 
   return {

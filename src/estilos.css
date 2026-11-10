@@ -463,6 +463,25 @@ legend {
   font-weight: 700;
 }
 
+/* Múltipla escolha: marca "correta" dentro da caixa da alternativa */
+.marca-multipla {
+  min-height: var(--alvo);
+  padding: 0 6px;
+  border-radius: var(--raio-p);
+  border: 1px solid transparent;
+}
+.marca-multipla input {
+  accent-color: var(--verde);
+}
+.marca-multipla.correta {
+  background: var(--ok-fundo);
+  border-color: #9fd0b3;
+}
+.marca-multipla.correta label {
+  color: var(--verde);
+  font-weight: 700;
+}
+
 /* Cores */
 .seletor-cor .cores {
   display: flex;

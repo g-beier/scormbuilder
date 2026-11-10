@@ -76,13 +76,18 @@ window.CONTEUDO = { formato: 2, id: "CTGESTAO_UD11_LEITURA2", contexto, titulo, 
 { tipo: "contraste", itens: [{ cor, titulo, texto }] }
 { tipo: "destaque", html }              { tipo: "confira", botao, titulo, paras }   // modal; id do bloco = id do modal
 { tipo: "fonte", html }
+{ tipo: "multipla", enunciado, opcoes: [{ texto, correta: bool, fb }], msgAcerto?, msgRevisar? }   // "Verificar respostas"
+{ tipo: "reflexao", pergunta, aviso?, minChars? (10), maxChars? (500), opcional? (true) }   // envia via Scorm.gravarResposta
+{ tipo: "escolha", pergunta, opcoes: [{ texto, retorno }] }                                    // sem gabarito
 ```
+
+Escape: campos HTML e campos simples inseridos via innerHTML são escapados pelo compilador. Já os campos que o motor insere via **textContent** não são escapados: `quiz.explica`, `multipla.opcoes[].fb`, `msgAcerto`, `msgRevisar`, `reflexao.aviso`, `escolha.opcoes[].retorno` e `contexto`. Na reflexão, `aviso` ausente usa o texto padrão, e `""` deixa a reflexão sem aviso (o compilador omite o campo quando está vazio).
 
 - `Motor.iniciar(conteudo, { chave?, telaInicial?, livre? })`. `livre` é o modo autor: não bloqueia o "Próximo" e esconde o aviso, mas as pendências continuam contando. `telaInicial` tem prioridade sobre `lesson_location`. A chamada devolve `{ ir, tela, total, pendencias, pendenciaTela, concluido }`.
 - Tipo novo de bloco: `Motor.bloco(tipo, { render(b, ctx), pendentes, aviso, falta: [sing, plural], estado, restaurar })`. Tipo desconhecido gera um aviso discreto, sem quebrar.
 - Textos vão por `innerHTML`, então aceitam `<strong>`, `<em>` e `<a target='_blank' rel='noopener'>`.
 - O "Próximo" fica bloqueado até o aluno responder os quizzes, abrir a sugestão de cada `ordenar` e abrir cada `confira`. A conclusão exige isso em todas as telas.
-- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar e confira = `1`. O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
+- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar, confira e reflexao (enviada) = `1`; multipla = índices marcados na última verificação; escolha = índice. O texto da reflexão nunca entra no suspend_data, só em `cmi.interactions`. O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
 - Diferente do motor antigo: o runtime **não** divide `ordenar` em várias telas (a importação de legado faz isso), e o progresso também é salvo em localStorage fora do LMS.
 - Mudar o runtime exige rodar `runtime/test/` (comparação com o original) e atualizar o `runtime/ORIGEM.md`.
 

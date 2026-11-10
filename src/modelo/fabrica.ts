@@ -1,6 +1,8 @@
 import type {
   Bloco,
   Meta,
+  OpcaoEscolha,
+  OpcaoMultipla,
   Projeto,
   Slide,
   SlideCapa,
@@ -99,7 +101,27 @@ export function novoBloco(tipo: TipoBloco): Bloco {
       return { id, tipo, botao: "Confira", titulo: "", paras: [""] };
     case "fonte":
       return { id, tipo, html: "" };
+    case "multipla":
+      // Nenhuma marcada como correta: o autor escolhe (a validação cobra).
+      return {
+        id,
+        tipo,
+        enunciado: "",
+        opcoes: [novaOpcaoMultipla(), novaOpcaoMultipla()],
+      };
+    case "reflexao":
+      return { id, tipo, pergunta: "" };
+    case "escolha":
+      return { id, tipo, pergunta: "", opcoes: [novaOpcaoEscolha(), novaOpcaoEscolha()] };
   }
+}
+
+export function novaOpcaoMultipla(): OpcaoMultipla {
+  return { texto: "", correta: false, fb: "" };
+}
+
+export function novaOpcaoEscolha(): OpcaoEscolha {
+  return { texto: "", retorno: "" };
 }
 
 function clonar<T>(v: T): T {

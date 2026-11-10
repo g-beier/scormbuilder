@@ -50,6 +50,46 @@ describe("importar: casos sintéticos", () => {
   });
 });
 
+describe("importar v2: tipos do M6", () => {
+  const fonte = `window.CONTEUDO = { formato: 2, id: "MAPIJ_UD4_LEITURA3", contexto: "c", titulo: "T", slides: [
+    { id: "s-capa", tipo: "capa", kicker: "k", titulo: "Capa", sub: "s" },
+    { id: "s-1", tipo: "conteudo", kicker: "K", titulo: "Tela", blocos: [
+      { id: "b-m", tipo: "multipla", enunciado: "Marque", novo: 1,
+        opcoes: [ { texto: "A", correta: true, fb: "Sim", cor: "z" }, { texto: "B", correta: "não", fb: "Não" } ],
+        msgAcerto: "Boa!" },
+      { id: "b-r", tipo: "reflexao", pergunta: "P?", minChars: 10, maxChars: "muito", opcional: false },
+      { id: "b-e", tipo: "escolha", pergunta: "E?", opcoes: [ { texto: "1", retorno: "r1" }, { texto: "2", retorno: "r2" } ] }
+    ] },
+    { id: "s-fim", tipo: "fim", titulo: "Fim", texto: "t" } ] };`;
+
+  it("lê os 3 tipos, guarda desconhecidos e formatos inesperados em extras", () => {
+    const { projeto, avisos } = importarDataJs(fonte);
+    const [m, r, e] = (projeto.slides[1] as SlideConteudo).blocos;
+    expect(m).toEqual({
+      id: "b-m",
+      tipo: "multipla",
+      enunciado: "Marque",
+      opcoes: [
+        { texto: "A", correta: true, fb: "Sim", extras: { cor: "z" } },
+        { texto: "B", correta: false, fb: "Não", extras: { correta: "não" } },
+      ],
+      msgAcerto: "Boa!",
+      extras: { novo: 1 },
+    });
+    expect(r).toEqual({ id: "b-r", tipo: "reflexao", pergunta: "P?", minChars: 10, opcional: false, extras: { maxChars: "muito" } });
+    expect(e).toEqual({ id: "b-e", tipo: "escolha", pergunta: "E?", opcoes: [{ texto: "1", retorno: "r1" }, { texto: "2", retorno: "r2" }] });
+    expect(avisos.filter((a) => /formato inesperado/.test(a))).toHaveLength(2);
+  });
+
+  it("ida e volta: compilar → importar → compilar é idêntico", () => {
+    const { projeto } = importarDataJs(fonte);
+    const js1 = compilarDataJs(projeto);
+    expect(js1).not.toContain("minChars"); // 10 é o padrão
+    const js2 = compilarDataJs(importarDataJs(js1).projeto);
+    expect(js2).toBe(js1);
+  });
+});
+
 // ---------- Teste de ouro com os pacotes reais do ead-scorm ----------
 
 const RAIZ = join(homedir(), "Dev", "ead-scorm");

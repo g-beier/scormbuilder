@@ -1,7 +1,9 @@
 import type {
   Bloco,
   BlocoCards,
+  BlocoMultipla,
   BlocoOrdenar,
+  BlocoReflexao,
   BlocoV2,
   Card,
   ConteudoV2,
@@ -10,6 +12,7 @@ import type {
   Slide,
   SlideV2,
 } from "./tipos";
+import { PADRAO_REFLEXAO } from "./tipos";
 import { escaparHtml as esc } from "./texto";
 
 /** Maiúsculas, sem acentos, só A-Z e 0-9. */
@@ -58,6 +61,9 @@ function compilarCard(c: Card): Card {
  * ordenar, botão e título do confira vão por innerHTML no motor e são escapados.
  * `explica` (textContent) e `contexto` (textContent) ficam como estão; campos ricos
  * já são HTML. Ver ./texto.ts e o inverso em importar.ts.
+ * Nos tipos do M6 (multipla, reflexao, escolha), os campos simples (`fb`,
+ * `retorno`, `aviso`, `msgAcerto`, `msgRevisar`) vão por textContent no motor
+ * e não são escapados.
  */
 export function compilarBloco(b: Bloco): BlocoV2 {
   switch (b.tipo) {
@@ -104,6 +110,32 @@ export function compilarBloco(b: Bloco): BlocoV2 {
       return { id: b.id, tipo: b.tipo, botao: esc(b.botao), titulo: esc(b.titulo), paras: [...b.paras] };
     case "fonte":
       return { id: b.id, tipo: b.tipo, html: b.html };
+    case "multipla": {
+      const out: Omit<BlocoMultipla, "extras"> = {
+        id: b.id,
+        tipo: b.tipo,
+        enunciado: b.enunciado,
+        opcoes: b.opcoes.map((o) => ({ texto: o.texto, correta: o.correta === true, fb: o.fb })),
+      };
+      if (temTexto(b.msgAcerto)) out.msgAcerto = b.msgAcerto;
+      if (temTexto(b.msgRevisar)) out.msgRevisar = b.msgRevisar;
+      return out;
+    }
+    case "reflexao": {
+      const out: Omit<BlocoReflexao, "extras"> = { id: b.id, tipo: b.tipo, pergunta: b.pergunta };
+      if (temTexto(b.aviso)) out.aviso = b.aviso;
+      if (typeof b.minChars === "number" && b.minChars !== PADRAO_REFLEXAO.minChars) out.minChars = b.minChars;
+      if (typeof b.maxChars === "number" && b.maxChars !== PADRAO_REFLEXAO.maxChars) out.maxChars = b.maxChars;
+      if (b.opcional === false) out.opcional = false;
+      return out;
+    }
+    case "escolha":
+      return {
+        id: b.id,
+        tipo: b.tipo,
+        pergunta: b.pergunta,
+        opcoes: b.opcoes.map((o) => ({ texto: o.texto, retorno: o.retorno })),
+      };
   }
 }
 
