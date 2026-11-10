@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITULO}}</title>
+<link rel="stylesheet" href="css/tema.css">
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-inner">
+    <div class="topo-titulo">
+      <p class="eyebrow" id="contexto"></p>
+      <h1 class="topo-h1">{{TITULO}}</h1>
+    </div>
+    <div class="progresso">
+      <div class="progresso-texto"><span id="counter">01 / 01</span> telas</div>
+      <div class="barra" aria-hidden="true"><div id="bar" class="barra-fill"></div></div>
+    </div>
+  </div>
+</header>
+
+<main id="stage" class="stage"></main>
+
+<footer class="footer">
+  <button id="prev" class="nav-btn sec" type="button">‹ Anterior</button>
+  <button id="next" class="nav-btn" type="button">Próximo ›</button>
+</footer>
+<div class="faixa" aria-hidden="true"></div>
+
+<div id="modais"></div>
+
+<script src="js/data.js"></script>
+<script src="js/scorm.js"></script>
+<script src="js/motor.js"></script>
+<script>Motor.iniciar(window.CONTEUDO);</script>
+</body>
+</html>
