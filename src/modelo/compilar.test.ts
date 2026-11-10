@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { compilarConteudo, compilarDataJs, nomePacote } from "./compilar";
+import { compilarConteudo, compilarDataJs, nomePacote, nomePacoteExibicao } from "./compilar";
 import { novoBloco, novoProjeto, novoSlide } from "./fabrica";
 import { avaliarDataJs, importarDataJs } from "./importar";
 import { desescaparHtml, escaparHtml } from "./texto";
 import type { BlocoConfira, BlocoOrdenar, BlocoQuiz, SlideConteudo } from "./tipos";
 
 describe("nomePacote", () => {
+  it("sem UD mostra UD? na tela", () => {
+    expect(nomePacoteExibicao({ curso: "CTGESTAO", ud: 0, atividade: "LEITURA", numero: 2 })).toBe("CTGESTAO_UD?_LEITURA2");
+    expect(nomePacoteExibicao({ curso: "CTGESTAO", ud: 3, atividade: "LEITURA", numero: 2 })).toBe("CTGESTAO_UD3_LEITURA2");
+  });
   it("formato padrão", () => {
     expect(nomePacote({ curso: "CTGESTAO", ud: 11, atividade: "LEITURA", numero: 2 })).toBe("CTGESTAO_UD11_LEITURA2");
   });

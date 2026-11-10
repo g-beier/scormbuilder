@@ -1,3 +1,4 @@
+mod exportar;
 mod projetos;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -20,6 +21,9 @@ pub fn run() {
             projetos::salvar_arquivo,
             projetos::abrir_arquivo,
             projetos::ler_data_js,
+            exportar::exportar_pacote,
+            exportar::ler_preferencias,
+            exportar::salvar_preferencias,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

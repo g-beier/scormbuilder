@@ -30,6 +30,12 @@ export function nomePacote(meta: Pick<Meta, "curso" | "ud" | "atividade" | "nume
   return `${curso}_UD${ud}_${atividade}${numero}`;
 }
 
+/** Nome do pacote para mostrar na tela: sem UD, mostra "UD?" (e não "UD0"). */
+export function nomePacoteExibicao(meta: Pick<Meta, "curso" | "ud" | "atividade" | "numero">): string {
+  const nome = nomePacote(meta);
+  return Number.isFinite(meta.ud) && meta.ud > 0 ? nome : nome.replace(/_UD0_/, "_UD?_");
+}
+
 // Opcionais: só entram se tiverem conteúdo.
 function temTexto(v: string | undefined): v is string {
   return typeof v === "string" && v.trim() !== "";

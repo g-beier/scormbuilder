@@ -28,6 +28,8 @@ export interface EstadoProjeto {
   projeto: Projeto | null;
   slideSelecionadoId: string | null;
   blocoSelecionadoId: string | null;
+  /** Conta cada `selecionarSlide`, mesmo da tela já selecionada (a prévia salta de novo para ela). */
+  selecaoN: number;
 
   /** Abre um projeto (zera o histórico de desfazer). */
   abrir(projeto: Projeto): void;
@@ -123,6 +125,7 @@ export const useProjeto = create<EstadoProjeto>()(
         projeto: null,
         slideSelecionadoId: null,
         blocoSelecionadoId: null,
+        selecaoN: 0,
 
         abrir(projeto) {
           set((st) => {
@@ -148,6 +151,7 @@ export const useProjeto = create<EstadoProjeto>()(
           set((st) => {
             st.slideSelecionadoId = id;
             st.blocoSelecionadoId = null;
+            st.selecaoN += 1;
           });
         },
 

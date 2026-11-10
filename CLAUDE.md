@@ -109,6 +109,12 @@ O escopo inclui tipos que o motor ainda não tem (ex.: arrastar para categorias,
 
 Não mudar cores, fontes ou formas do visual aprovado pelo cliente (Poppins/Krona One, cantos arredondados, rodapé tricolor) sem pedido explícito.
 
+## Vocabulário da interface (decidido com o usuário)
+
+- No editor, um campo mal preenchido é **"a corrigir"** (ex.: "4 a corrigir", "11 a corrigir · 1 aviso"). Não use "pendência" para isso: no pacote, "pendência" é o que o aluno ainda não fez.
+- Nomes dos blocos na interface: Texto (`texto`), Lista, Cartões, Ordenar passos, Linha do tempo, Perguntas (`quiz`), Comparação (`contraste`), Destaque, Confira, Fonte / referência (`fonte`). Os valores de `tipo` no `data.js` não mudam.
+- A interface nunca mostra nomes de campo do `data.js` (`kicker`, `paras`, `html`).
+
 ## Cuidados de conteúdo
 
 - Conteúdo jurídico (leis, artigos, regras) só da fonte oficial. Não completar de memória nem inventar URLs.

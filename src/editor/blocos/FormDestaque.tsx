@@ -6,7 +6,7 @@ export function FormDestaque({ bloco, editar, f }: PropsFormBloco<BlocoDestaque>
   return (
     <CampoRico
       rotulo="Texto em destaque"
-      ajuda="Aparece numa caixa colorida, para a ideia principal da tela. Se a tela tiver vários passos de ordenar, aparece só no último."
+      ajuda="Aparece numa caixa colorida, para a ideia principal da tela."
       valor={bloco.html}
       foco={f("html")}
       aoMudar={(v) => editar((b) => void (b.html = v), f("html"))}

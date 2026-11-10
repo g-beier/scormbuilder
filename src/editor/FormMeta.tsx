@@ -1,7 +1,7 @@
 /** Dados do pacote (curso, UD, atividade…), usados no "Novo SCORM" e no editor. */
 import { useId, useState } from "react";
 import type { Meta } from "../modelo/tipos";
-import { nomePacote } from "../modelo/compilar";
+import { nomePacoteExibicao } from "../modelo/compilar";
 
 export const CURSOS = [
   { sigla: "CTGESTAO", nome: "Curso Técnico de Gestão de UELs" },
@@ -26,13 +26,16 @@ export function FormMeta({
   focoPrefixo,
   autoFocar,
   erroTitulo,
+  erroUd,
 }: {
   meta: Meta;
   aoMudar(parcial: Partial<Meta>, campo: keyof Meta): void;
   /** Se houver, os campos ganham data-foco (para o painel de problemas). */
   focoPrefixo?: string;
+  /** Marca o título como o campo que recebe o foco quando o diálogo abre. */
   autoFocar?: boolean;
   erroTitulo?: string;
+  erroUd?: string;
 }) {
   const id = useId();
   const fid = (c: string) => `${id}-${c}`;
@@ -41,7 +44,7 @@ export function FormMeta({
   const atividadeConhecida = ATIVIDADES.some((a) => a.sigla === meta.atividade);
   const [cursoOutro, setCursoOutro] = useState(!cursoConhecido);
   const [atividadeOutra, setAtividadeOutra] = useState(!atividadeConhecida);
-  const nome = nomePacote(meta);
+  const nome = nomePacoteExibicao(meta);
 
   const numero = (v: string) => {
     const n = parseInt(v, 10);
@@ -55,7 +58,7 @@ export function FormMeta({
         <input
           id={fid("titulo")}
           type="text"
-          autoFocus={autoFocar}
+          data-autofoco={autoFocar ? "" : undefined}
           value={meta.titulo}
           data-foco={foco("titulo")}
           aria-describedby={erroTitulo ? `${fid("titulo-erro")} ${fid("titulo-ajuda")}` : fid("titulo-ajuda")}
@@ -115,10 +118,18 @@ export function FormMeta({
             type="number"
             min={1}
             inputMode="numeric"
+            aria-required="true"
             value={meta.ud > 0 ? meta.ud : ""}
             data-foco={foco("ud")}
+            aria-invalid={erroUd ? true : undefined}
+            aria-describedby={erroUd ? fid("ud-erro") : undefined}
             onChange={(e) => aoMudar({ ud: numero(e.target.value) }, "ud")}
           />
+          {erroUd && (
+            <p id={fid("ud-erro")} className="erro-campo" role="alert">
+              {erroUd}
+            </p>
+          )}
         </div>
       </div>
 

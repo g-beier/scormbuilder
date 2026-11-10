@@ -216,16 +216,16 @@ export interface Problema {
 
 /** Nomes amigáveis (pt-BR) dos tipos, para mensagens e interface. */
 export const NOMES_BLOCO: Record<TipoBloco, string> = {
-  texto: "Parágrafos",
+  texto: "Texto",
   lista: "Lista",
   cards: "Cartões",
   ordenar: "Ordenar passos",
   linha: "Linha do tempo",
-  quiz: "Quiz",
-  contraste: "Contraste",
+  quiz: "Perguntas",
+  contraste: "Comparação",
   destaque: "Destaque",
   confira: "Confira",
-  fonte: "Fonte",
+  fonte: "Fonte / referência",
 };
 
 export const NOMES_SLIDE: Record<TipoSlide, string> = {

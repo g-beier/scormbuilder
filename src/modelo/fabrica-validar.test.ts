@@ -71,9 +71,9 @@ describe("fábrica", () => {
     expect(erros(p)).toEqual([]);
   });
 
-  it("projeto novo sem meta: só erro de título da capa e aviso de meta", () => {
+  it("projeto novo sem meta: título da capa e UD a corrigir, aviso de meta", () => {
     const p = novoProjeto();
-    expect(erros(p).map((e) => e.campo)).toEqual(["titulo"]);
+    expect(erros(p).map((e) => e.campo)).toEqual(["titulo", "meta"]);
     expect(avisos(p).map((a) => a.campo)).toEqual(["meta"]);
   });
 
@@ -126,11 +126,11 @@ describe("validar: erros", () => {
     ["destaque vazio", (p) => bl(p, "destaque", (b) => (b.html = "")), /texto do destaque/],
     ["fonte vazia", (p) => bl(p, "fonte", (b) => (b.html = "")), /escreva a fonte/],
     ["linha sem texto", (p) => bl(p, "linha", (b) => (b.itens[0].texto = "")), /texto do marco 1/],
-    ["contraste sem título", (p) => bl(p, "contraste", (b) => (b.itens[0].titulo = "")), /título do item 1/],
-    ["ordenar sem porquê", (p) => bl(p, "ordenar", (b) => (b.porque = "")), /explicação da ordem/],
+    ["contraste sem título", (p) => bl(p, "contraste", (b) => (b.itens[0].titulo = "")), /título do lado 1/],
+    ["ordenar sem porquê", (p) => bl(p, "ordenar", (b) => (b.porque = "")), /Por que esta ordem/],
     ["pergunta sem explicação", (p) => bl(p, "quiz", (b) => (b.perguntas[0].explica = "")), /explicação da resposta/],
-    ["fim sem texto", (p) => ((p.slides[2] as { texto: string }).texto = ""), /texto da tela de fim/],
-    ["id duplicado", (p) => (conteudo(p).blocos[1].id = conteudo(p).blocos[0].id), /repete o identificador/],
+    ["fim sem texto", (p) => ((p.slides[2] as { texto: string }).texto = ""), /falta a mensagem final/],
+    ["id duplicado", (p) => (conteudo(p).blocos[1].id = conteudo(p).blocos[0].id), /corrompido ou repetido/],
   ];
 
   it.each(casos)("%s", (_nome, mexer, re) => {
@@ -160,7 +160,7 @@ describe("validar: avisos", () => {
   it("tela de conteúdo sem blocos", () => {
     const p = projetoValido();
     conteudo(p).blocos = [];
-    expect(avisos(p).map((a) => a.mensagem)).toEqual(["Tela 2: a tela ainda não tem nenhum bloco de conteúdo."]);
+    expect(avisos(p).map((a) => a.mensagem)).toEqual(["Tela 2: a tela ainda não tem nenhum bloco de conteúdo. Use “Adicionar bloco”."]);
   });
 
   it("suspend_data grande", () => {
@@ -173,13 +173,37 @@ describe("validar: avisos", () => {
       p.slides.splice(1, 0, s);
     }
     expect(estimarSuspendData(p)).toBeGreaterThan(base);
-    expect(avisos(p).some((a) => /grande demais/.test(a.mensagem))).toBe(true);
+    expect(avisos(p).some((a) => /demais para o Moodle/.test(a.mensagem))).toBe(true);
   });
 
   it("meta incompleta", () => {
     const p = projetoValido();
     p.meta.ud = 0;
-    expect(avisos(p).map((a) => a.mensagem)).toEqual(["Dados do pacote incompletos: falta número da UD."]);
+    expect(avisos(p)).toEqual([]);
+    expect(erros(p).map((a) => a.mensagem)).toEqual([
+      "Dados do pacote: falta o “Número da UD”. Ele faz parte do nome do pacote no Moodle.",
+    ]);
+  });
+
+  it("meta com vários campos faltando usa plural", () => {
+    const p = projetoValido();
+    p.meta.contexto = "";
+    p.meta.curso = "";
+    expect(avisos(p).map((a) => a.mensagem)).toEqual(["Dados do pacote incompletos: faltam “Curso” e “Linha de contexto”."]);
+    p.meta.curso = "CTGESTAO";
+    expect(avisos(p).map((a) => a.mensagem)).toEqual(["Dados do pacote incompletos: falta “Linha de contexto”."]);
+  });
+
+  it("cartão vazio gera só um item a corrigir", () => {
+    const p = projetoValido();
+    bl(p, "cards", (b) => (b.cards = [{ cor: "navy", paras: [""] }]));
+    expect(erros(p).map((e) => e.mensagem)).toEqual(["Tela 2: no bloco “Cartões”, o cartão 1 está vazio."]);
+  });
+
+  it("campo simples com “<” não conta como vazio", () => {
+    const p = projetoValido();
+    conteudo(p).titulo = "<b>";
+    expect(erros(p)).toEqual([]);
   });
 });
 

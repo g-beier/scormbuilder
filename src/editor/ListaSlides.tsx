@@ -32,7 +32,9 @@ export function ListaSlides({ slides, problemas }: { slides: Slide[]; problemas:
 
   return (
     <nav className="lista-slides" aria-label="Telas do SCORM">
-      <h2 className="coluna-titulo">Telas</h2>
+      <h2 className="coluna-titulo" tabIndex={-1}>
+        Telas
+      </h2>
       <DndContext
         sensors={sensores}
         collisionDetection={closestCenter}
@@ -103,16 +105,22 @@ function ItemSlide({
   const rotulo = `Tela ${indice + 1}`;
 
   async function excluir() {
-    const extra =
-      slide.tipo === "fim"
-        ? " Sem a tela de fim, o SCORM não pode ser exportado."
-        : slide.tipo === "capa"
-          ? " O SCORM ficará sem capa."
-          : "";
-    const ok = await confirmar(`Excluir a ${rotulo.toLowerCase()} (“${titulo}”)?${extra} Você pode desfazer com ⌘Z.`, {
-      titulo: "Excluir tela",
+    const desfazer = "Para voltar atrás: Desfazer (⌘Z).";
+    const mensagem =
+      slide.tipo === "capa"
+        ? `Excluir a capa (“${titulo}”)? O SCORM ficará sem capa. Para criar outra, use “+ Capa” na lista de telas. ${desfazer}`
+        : slide.tipo === "fim"
+          ? `Excluir a tela de fim (“${titulo}”)? Sem ela o SCORM não pode ser exportado. Para criar outra, use “+ Tela de fim” na lista de telas. ${desfazer}`
+          : `Excluir a ${rotulo.toLowerCase()} (“${titulo}”)? ${desfazer}`;
+    const ok = await confirmar(mensagem, { titulo: "Excluir tela" });
+    if (!ok) return;
+    excluirSlide(slide.id);
+    // O botão de excluir sumiu: foca a tela vizinha (anterior, senão a próxima) ou o título da lista.
+    requestAnimationFrame(() => {
+      const botoes = document.querySelectorAll<HTMLElement>(".lista-slides .slide-botao");
+      const alvo = botoes[Math.max(0, indice - 1)] ?? document.querySelector<HTMLElement>(".lista-slides .coluna-titulo");
+      alvo?.focus();
     });
-    if (ok) excluirSlide(slide.id);
   }
 
   return (
@@ -151,9 +159,10 @@ function ItemSlide({
           <span className="slide-titulo">{titulo}</span>
         </span>
         {erros > 0 && (
-          <span className="selo selo-erro">
+          <span className="selo selo-erro" title={`${erros} a corrigir`}>
+            <Icone nome="erro" tamanho={14} />
             {erros}
-            <span className="so-leitor"> {erros === 1 ? "pendência" : "pendências"}</span>
+            <span className="so-leitor"> a corrigir</span>
           </span>
         )}
       </button>

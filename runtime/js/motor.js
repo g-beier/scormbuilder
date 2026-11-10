@@ -615,11 +615,12 @@ var Motor = (function () {
       var n = passos.length;
       var blocoEl = el("div", "flow-block");
       blocoEl.setAttribute("data-fluxo", ctx.seq("fluxo"));
-      blocoEl.appendChild(el("p", "flow-name", b.nome));
+      var nomeEl = el("p", "flow-name", b.nome);
+      blocoEl.appendChild(nomeEl);
       blocoEl.appendChild(el("p", "flow-help", "Arraste os cards para colocar os passos na ordem em que acontecem. Também dá para usar as setas ↑ ↓ do teclado."));
 
       var ol = el("ol", "drag-list");
-      ol.setAttribute("aria-label", "Ordem dos passos: " + (b.nome || ""));
+      ol.setAttribute("aria-label", "Ordem dos passos: " + (nomeEl.textContent || "").trim());
       embaralhar(n).forEach(function (solIdx) { ol.appendChild(criarCardPasso(b, solIdx)); });
       blocoEl.appendChild(ol);
 

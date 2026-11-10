@@ -5,7 +5,7 @@ import { opsTextos, type PropsFormBloco } from "./comum";
 export function FormTexto(p: PropsFormBloco<BlocoTexto>) {
   return (
     <ListaDeTextos
-      titulo="Parágrafos"
+      titulo="Parágrafos do texto"
       ajuda="Cada parágrafo aparece separado na tela, na ordem abaixo."
       valores={p.bloco.paras}
       rotuloItem={(i) => `Parágrafo ${i + 1}`}

@@ -16,6 +16,7 @@ import { Dialogo } from "../editor/Dialogo";
 import { pedirFoco } from "../editor/foco";
 import { tratarAtalhoDesfazer, tratarEsc } from "../editor/atalhos";
 import { PainelPrevia } from "../previa/PainelPrevia";
+import { DialogoExportar } from "../editor/DialogoExportar";
 
 const CHAVE_PREVIA = "scorm-builder:previa-recolhida";
 
@@ -29,8 +30,10 @@ function lerPreferencia(): boolean {
 
 export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): void }) {
   const slideSelecionadoId = useProjeto((s) => s.slideSelecionadoId);
+  const selecaoN = useProjeto((s) => s.selecaoN);
   const { selecionarSlide, selecionarBloco, atualizarMeta } = useProjeto.getState();
   const [dadosAbertos, setDadosAbertos] = useState(false);
+  const [exportarAberto, setExportarAberto] = useState(false);
   const [previaRecolhida, setPreviaRecolhida] = useState(lerPreferencia);
   const problemas = useMemo(() => validar(projeto), [projeto]);
 
@@ -40,6 +43,15 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
   useEffect(() => {
     if (!slide && projeto.slides.length) selecionarSlide(projeto.slides[0].id);
   }, [slide, projeto.slides, selecionarSlide]);
+
+  // Ao abrir o editor (ex.: depois de "Criar SCORM"), o foco não fica perdido no <body>.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      document.querySelector<HTMLElement>(".form-slide-titulo")?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   useEffect(() => {
     const teclas = (e: KeyboardEvent) => {
@@ -95,6 +107,7 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
         aoAbrirDados={() => setDadosAbertos(true)}
         aoIrProblema={irProblema}
         aoSalvarComo={salvarComo}
+        aoExportar={() => setExportarAberto(true)}
         aoInicio={aoInicio}
       />
       <div className={`editor-colunas${previaRecolhida ? " previa-recolhida" : ""}`}>
@@ -114,6 +127,7 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
         <PainelPrevia
           projeto={projeto}
           slideSelecionadoId={slideSelecionadoId}
+          selecaoN={selecaoN}
           recolhido={previaRecolhida}
           aoAlternar={alternarPrevia}
         />
@@ -134,6 +148,15 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
           aoMudar={(parcial, campo) => atualizarMeta(parcial, `meta/${campo}`)}
         />
       </Dialogo>
+      <DialogoExportar
+        projeto={projeto}
+        aberto={exportarAberto}
+        aoFechar={() => setExportarAberto(false)}
+        aoIrParaProblema={() => {
+          const primeiro = problemas.find((p) => p.nivel === "erro");
+          if (primeiro) irProblema(primeiro);
+        }}
+      />
     </div>
   );
 }

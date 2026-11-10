@@ -137,8 +137,10 @@ function ListaBlocos({
     const id = adicionarBloco(slideId, tipo);
     if (!id) return;
     requestAnimationFrame(() => {
-      // Foca o primeiro campo do bloco novo.
-      const el = document.querySelector<HTMLElement>(`[data-bloco="${id}"] .bloco-corpo [data-foco]`);
+      // Foca o primeiro campo editável do bloco novo (não a legenda de uma lista).
+      const el = document.querySelector<HTMLElement>(
+        `[data-bloco="${id}"] .bloco-corpo :is(input, select, textarea, [contenteditable="true"])`,
+      );
       el?.scrollIntoView({ block: "center" });
       el?.focus({ preventScroll: true });
     });
@@ -146,7 +148,7 @@ function ListaBlocos({
 
   return (
     <section className="secao-blocos" aria-labelledby="titulo-blocos">
-      <h3 id="titulo-blocos" className="secao-titulo">
+      <h3 id="titulo-blocos" className="secao-titulo" tabIndex={-1}>
         Blocos da tela
       </h3>
       {blocos.length === 0 ? (
@@ -210,10 +212,17 @@ function CartaoBloco({
   const Form = FORMS_BLOCO[bloco.tipo] as ComponentType<PropsFormBloco<Bloco>>;
 
   async function excluir() {
-    const ok = await confirmar(`Excluir o bloco “${nome}” desta tela? Você pode desfazer com ⌘Z.`, {
+    const ok = await confirmar(`Excluir o bloco “${nome}” desta tela? Para voltar atrás: Desfazer (⌘Z).`, {
       titulo: "Excluir bloco",
     });
-    if (ok) excluirBloco(slideId, bloco.id);
+    if (!ok) return;
+    excluirBloco(slideId, bloco.id);
+    // Foca o bloco vizinho (anterior, senão o próximo) ou o título da seção.
+    requestAnimationFrame(() => {
+      const nomes = document.querySelectorAll<HTMLElement>(".lista-blocos .bloco-nome");
+      const alvo = nomes[Math.max(0, indice - 1)] ?? document.getElementById("titulo-blocos");
+      alvo?.focus();
+    });
   }
 
   return (
@@ -245,8 +254,9 @@ function CartaoBloco({
             {indice + 1}. {nome}
           </h4>
           {erros > 0 && (
-            <span className="selo selo-erro" title="Problemas neste bloco">
-              {erros} {erros === 1 ? "pendência" : "pendências"}
+            <span className="selo selo-erro">
+              <Icone nome="erro" tamanho={14} />
+              {erros} a corrigir
             </span>
           )}
           <div className="bloco-acoes">
