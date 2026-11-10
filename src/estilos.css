@@ -1197,24 +1197,137 @@ legend {
 }
 .previa-corpo {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 0 14px 14px;
+  overflow-y: auto;
+}
+.previa-corpo[hidden] {
+  display: none;
 }
 .previa-quadro {
-  height: 100%;
-  min-height: 300px;
+  flex: 1;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.previa-quadro.grande {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  padding: 16px 24px 20px;
+  background: var(--fundo);
+  box-shadow: var(--sombra-alta);
+}
+.previa-controles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.previa-grupo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.previa-grupo .btn[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.previa-aviso {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--raio-p);
+  background: var(--perigo-fundo);
+  color: var(--perigo);
+  font-weight: 600;
+}
+.previa-aviso .icone {
+  flex: none;
+  margin-top: 2px;
+}
+.previa-palco {
+  flex: 1;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  text-align: center;
-  padding: 24px;
-  border: 2px dashed var(--borda-forte);
-  border-radius: var(--raio);
-  color: var(--texto-suave);
-  font-weight: 600;
+  overflow: hidden;
 }
-.previa-quadro .ajuda {
-  font-weight: 400;
-  max-width: 260px;
+.previa-moldura {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-p);
+  background: #fff;
+  box-shadow: var(--sombra);
+  box-sizing: content-box;
+}
+.previa-moldura iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  transform-origin: 0 0;
+  background: #fff;
+}
+.previa-legenda {
+  margin: 0;
+  text-align: center;
+}
+.situacao-scorm {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  padding: 0 12px;
+}
+.situacao-scorm summary {
+  min-height: var(--alvo);
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+}
+.situacao-scorm[open] {
+  padding-bottom: 10px;
+}
+.situacao-scorm .ajuda {
+  margin: 0 0 8px;
+}
+.situacao-scorm dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.93rem;
+}
+.situacao-scorm dt {
+  color: var(--texto-suave);
+}
+.situacao-scorm dd {
+  margin: 0;
+}
+.barra-suspend {
+  display: block;
+  height: 8px;
+  margin: 4px 0 2px;
+  border-radius: 4px;
+  background: var(--selecao);
+  overflow: hidden;
+}
+.barra-suspend span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--verde);
+}
+.barra-suspend span.cheia {
+  background: var(--perigo);
 }
