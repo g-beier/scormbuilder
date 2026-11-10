@@ -2,7 +2,8 @@
  * Diálogo "Exportar pacote": confere se há itens a corrigir, escolhe Zip
  * (para o Moodle) ou Pasta, o destino (lembrado entre sessões) e chama o
  * comando Rust `exportar_pacote`. Também oferece o atalho para a pasta do
- * repositório ead-scorm, quando ela estiver definida.
+ * repositório ead-scorm, quando ela estiver definida. Por fim, abre o "PDF da
+ * leitura" (M7), a versão para o aluno baixar e guardar como registro.
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Dialogo } from "./Dialogo";
@@ -12,6 +13,7 @@ import type { Projeto } from "../modelo/tipos";
 import { validar } from "../modelo/validar";
 import { compilarDataJs, nomePacote } from "../modelo/compilar";
 import { confirmar } from "../servicos/dialogos";
+import { abrirImpressao } from "../servicos/impressao";
 import { emTauri, mensagemDeErro, MSG_SO_NO_APP } from "../servicos/ambiente";
 import {
   escolherPasta,
@@ -254,6 +256,26 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
               )}
             </div>
           )}
+
+          <div className="exportar-pdf">
+            <p>
+              <strong>PDF da leitura</strong>
+              <span className="ajuda">
+                Para o aluno baixar e guardar como registro. As atividades aparecem em versão para preencher à mão, sem as
+                respostas; o conteúdo dos “Confira” vai para o fim. Publique o PDF no Moodle ao lado do pacote.
+              </span>
+            </p>
+            <button
+              type="button"
+              className="btn"
+              onClick={() =>
+                void abrirImpressao(projeto).catch((e) => setErro(e instanceof Error ? e.message : mensagemDeErro(e)))
+              }
+            >
+              <Icone nome="arquivo" />
+              Abrir PDF da leitura…
+            </button>
+          </div>
 
           <div className="exportar-status" role="status" aria-live="polite">
             {exportando && <p>Exportando o pacote…</p>}

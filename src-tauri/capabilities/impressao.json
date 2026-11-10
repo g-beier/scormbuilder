@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "impressao",
+  "description": "Janela do PDF da leitura: imprimir e fechar",
+  "windows": ["impressao"],
+  "permissions": ["core:default", "core:webview:allow-print", "core:window:allow-close"]
+}

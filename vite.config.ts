@@ -62,6 +62,16 @@ function runtimePlugin(): Plugin {
 export default defineConfig(() => ({
   plugins: [react(), runtimePlugin()],
 
+  // Duas páginas: o app e a janela "PDF da leitura" (M7)
+  build: {
+    rolldownOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        imprimir: fileURLToPath(new URL("./imprimir.html", import.meta.url)),
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

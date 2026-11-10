@@ -1816,7 +1816,10 @@ var Motor = (function () {
     raiz.innerHTML = "";
     document.documentElement.classList.add("impressao");
     document.body.classList.add("impressao");
-    var problema = problemaConteudo(C);
+    // A tela de fim não entra no PDF: aqui basta o formato e haver telas
+    var problema = !C || typeof C !== "object" ? "O conteúdo da leitura não foi carregado."
+      : C.formato !== 2 ? "O conteúdo está num formato que este motor não reconhece (esperado: formato 2)."
+      : !C.slides || !C.slides.length ? "O conteúdo não tem telas." : null;
     if (problema) {
       raiz.appendChild(texto("p", "imp-erro", problema));
       return false;

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF da leitura</title>
+    <link rel="stylesheet" href="/runtime/css/tema.css" />
+    <style>
+      /* Barra só na tela (o tema.css a esconde na impressão) */
+      .imp-barra {
+        position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+        padding: 10px 24px; background: #1b1f4b; color: #fff; font-family: "Poppins", system-ui, sans-serif;
+      }
+      .imp-barra p { margin: 0; flex: 1 1 320px; font-size: 14px; line-height: 1.4; }
+      .imp-barra button {
+        font: inherit; font-weight: 600; font-size: 15px; min-height: 40px; padding: 6px 16px; border-radius: 8px;
+        border: 2px solid #fff; background: #fff; color: #1b1f4b; cursor: pointer;
+      }
+      .imp-barra button.sec { background: transparent; color: #fff; }
+      .imp-barra button:focus-visible { outline: 3px solid #fcb913; outline-offset: 2px; }
+    </style>
+  </head>
+  <body class="impressao">
+    <div class="imp-barra" role="region" aria-label="Ações do PDF">
+      <p id="imp-ajuda">Confira a leitura e clique em “Salvar em PDF”. No diálogo de impressão, escolha “Salvar como PDF” (no Windows, “Microsoft Print to PDF”).</p>
+      <button type="button" id="imp-salvar" aria-describedby="imp-ajuda">Salvar em PDF</button>
+      <button type="button" id="imp-fechar" class="sec">Fechar</button>
+    </div>
+    <main id="doc" aria-label="Leitura para imprimir"></main>
+    <script type="module" src="/src/impressao/main.ts"></script>
+  </body>
+</html>
