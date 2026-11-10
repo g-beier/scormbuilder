@@ -95,6 +95,15 @@ export function textosDoBloco(b: Bloco): Array<[campo: string, html: string]> {
       if (b.msgAcerto !== undefined) out.push(["msgAcerto", b.msgAcerto]);
       if (b.msgRevisar !== undefined) out.push(["msgRevisar", b.msgRevisar]);
       break;
+    case "ramificado":
+      b.perguntas.forEach((p, k) => {
+        out.push([`perguntas[${k}].enunciado`, p.enunciado]);
+        p.alternativas.forEach((a, j) => {
+          out.push([`perguntas[${k}].alternativas[${j}].texto`, a.texto]);
+          out.push([`perguntas[${k}].alternativas[${j}].retorno`, a.retorno]);
+        });
+      });
+      break;
     case "categorizar":
       out.push(["enunciado", b.enunciado]);
       b.categorias.forEach((c, i) => out.push([`categorias[${i}]`, c]));
@@ -138,7 +147,8 @@ function textosDoSlide(s: Slide): Array<[string, string]> {
  * guarda os índices marcados (≈ 2 caracteres por alternativa + colchetes),
  * reflexão guarda 1 (enviada) e escolha com retorno o índice escolhido;
  * para esses dois, 8 caracteres de folga. Classificar guarda a categoria de
- * cada item (≈ 2 caracteres por item + colchetes).
+ * cada item (≈ 2 caracteres por item + colchetes). Questionário com caminhos
+ * guarda `{"r":[alternativa de cada pergunta],"e":1}` (≈ 3 por pergunta + 14).
  */
 export function estimarSuspendData(projeto: Projeto): number {
   let n = 60; // envelope JSON, chaves e lesson_location
@@ -150,6 +160,7 @@ export function estimarSuspendData(projeto: Projeto): number {
       else if (b.tipo === "ordenar" || b.tipo === "confira") n += b.id.length + 4;
       else if (b.tipo === "multipla") n += b.id.length + 4 + 2 * (b.opcoes?.length ?? 0) + 4;
       else if (b.tipo === "reflexao" || b.tipo === "escolha") n += b.id.length + 4 + 8;
+      else if (b.tipo === "ramificado") n += b.id.length + 4 + 14 + 3 * (b.perguntas?.length ?? 0);
       else if (b.tipo === "categorizar") n += b.id.length + 4 + 2 * (b.itens?.length ?? 0) + 2;
     }
   }
@@ -405,6 +416,87 @@ export function validar(projeto: Projeto): Problema[] {
         });
         break;
       }
+      case "ramificado": {
+        const perguntas = b.perguntas ?? [];
+        if (perguntas.length === 0) {
+          erro("perguntas", "adicione pelo menos uma pergunta.");
+          break;
+        }
+        const pos = new Map<string, number>();
+        perguntas.forEach((p, k) => {
+          if (!p.id || pos.has(p.id)) erro(`perguntas[${k}].enunciado`, `a pergunta ${k + 1} tem um identificador repetido. Exclua e crie de novo.`);
+          else pos.set(p.id, k);
+        });
+        let destinosOk = true;
+        perguntas.forEach((p, k) => {
+          const n = k + 1;
+          if (vazio(p.enunciado)) erro(`perguntas[${k}].enunciado`, `falta o enunciado da pergunta ${n}.`);
+          const alts = p.alternativas ?? [];
+          if (alts.length < 2) erro(`perguntas[${k}].alternativas`, `a pergunta ${n} precisa de pelo menos 2 alternativas.`);
+          alts.forEach((a, j) => {
+            const campo = `perguntas[${k}].alternativas[${j}]`;
+            if (vazio(a.texto)) erro(`${campo}.texto`, `a alternativa ${j + 1} da pergunta ${n} está vazia.`);
+            if (a.proxima === p.id) {
+              destinosOk = false;
+              erro(`${campo}.proxima`, `a alternativa ${j + 1} da pergunta ${n} leva para a própria pergunta. Escolha outra pergunta ou “Fim do questionário”.`);
+            } else if (a.proxima !== "fim" && !pos.has(a.proxima)) {
+              destinosOk = false;
+              erro(`${campo}.proxima`, `a alternativa ${j + 1} da pergunta ${n} leva para uma pergunta que não existe mais. Escolha outra.`);
+            }
+          });
+        });
+        if (!destinosOk) break;
+        // Ciclos: um caminho que volta a uma pergunta já respondida nunca termina
+        const estado = new Array<0 | 1 | 2>(perguntas.length).fill(0); // 0 = não visitada, 1 = no caminho, 2 = pronta
+        let ciclo = null as [number, number] | null;
+        const visitar = (k: number) => {
+          estado[k] = 1;
+          for (const a of perguntas[k].alternativas ?? []) {
+            if (ciclo || a.proxima === "fim") continue;
+            const d = pos.get(a.proxima)!;
+            if (estado[d] === 1) ciclo = [k, d];
+            else if (estado[d] === 0) visitar(d);
+          }
+          estado[k] = 2;
+        };
+        perguntas.forEach((_, k) => estado[k] === 0 && !ciclo && visitar(k));
+        if (ciclo) {
+          const [de, para] = ciclo;
+          erro(
+            `perguntas[${de}].alternativas`,
+            `a pergunta ${de + 1} leva de volta à pergunta ${para + 1}, e o questionário nunca chegaria ao fim. Ajuste o “Depois desta, ir para”.`,
+          );
+          break;
+        }
+        // Perguntas que nenhum caminho a partir da 1 alcança
+        const alcancadas = new Set<number>([0]);
+        const fila = [0];
+        while (fila.length) {
+          const k = fila.shift()!;
+          for (const a of perguntas[k].alternativas ?? []) {
+            const d = a.proxima === "fim" ? undefined : pos.get(a.proxima);
+            if (d !== undefined && !alcancadas.has(d)) {
+              alcancadas.add(d);
+              fila.push(d);
+            }
+          }
+        }
+        const soltas = perguntas.map((_, k) => k).filter((k) => !alcancadas.has(k));
+        if (soltas.length) {
+          const quais = juntar(soltas.map((k) => String(k + 1)));
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: `perguntas[${soltas[0]}].enunciado`,
+            mensagem:
+              soltas.length === 1
+                ? `${tela(i)}: no bloco “${nome}”, nenhum caminho chega à pergunta ${quais}. Confira o “Depois desta, ir para” das perguntas anteriores.`
+                : `${tela(i)}: no bloco “${nome}”, nenhum caminho chega às perguntas ${quais}. Confira o “Depois desta, ir para” das perguntas anteriores.`,
+          });
+        }
+        break;
+      }
       case "categorizar": {
         const { minCategorias, maxCategorias, minItens, itensAviso } = LIMITES_CATEGORIZAR;
         if (vazio(b.enunciado)) erro("enunciado", "falta o enunciado.");
@@ -422,7 +514,7 @@ export function validar(projeto: Projeto): Problema[] {
         // Categoria sem nenhum item funciona, mas costuma ser descuido
         const vazias = cats.map((_, c) => (itens.some((it) => it.categoria === c) ? -1 : c)).filter((c) => c >= 0);
         if (cats.length >= minCategorias && itens.length >= minItens && vazias.length) {
-          const quais = juntar(vazias.map((c) => String(c + 1)));
+          const quais = juntar(vazias.map((c) => (cats[c].trim() ? `“${cats[c].trim()}”` : String(c + 1))));
           probs.push({
             nivel: "aviso",
             slideId,
@@ -440,7 +532,7 @@ export function validar(projeto: Projeto): Problema[] {
             slideId,
             blocoId: b.id,
             campo: "itens",
-            mensagem: `${tela(i)}: o bloco “${nome}” tem ${itens.length} itens. Com mais de ${itensAviso}, a atividade fica longa no celular; considere dividir em duas telas.`,
+            mensagem: `${tela(i)}: o bloco “${nome}” tem ${itens.length} itens. Com mais de ${itensAviso}, a atividade fica longa no celular; considere até 3 categorias e 8 itens, ou dividir em duas telas.`,
           });
         }
         break;

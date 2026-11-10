@@ -10,7 +10,9 @@ import type {
   ItemContraste,
   ItemLinha,
   Meta,
+  AlternativaRamificada,
   ItemCategorizar,
+  PerguntaRamificada,
   OpcaoEscolha,
   OpcaoMultipla,
   Pergunta,
@@ -218,6 +220,20 @@ function lerItemCategorizar(o: Obj, av: string[], onde: string): ItemCategorizar
   return comExtras(it, l.fim(["texto", "categoria", "fb"]));
 }
 
+function lerPerguntaRamificada(o: Obj, av: string[], onde: string): PerguntaRamificada {
+  const l = new Leitor(o, av, onde);
+  const p: PerguntaRamificada = {
+    id: l.s("id") || novoId("q"),
+    enunciado: l.s("enunciado"),
+    alternativas: l.objs("alternativas").map((x, k) => {
+      const la = new Leitor(x, av, `${onde}, alternativa ${k + 1}`);
+      const a: AlternativaRamificada = { texto: la.s("texto"), retorno: la.s("retorno"), proxima: la.s("proxima") || "fim" };
+      return comExtras(a, la.fim(["texto", "retorno", "proxima"]));
+    }),
+  };
+  return comExtras(p, l.fim(["id", "enunciado", "alternativas"]));
+}
+
 function lerOpcaoEscolha(o: Obj, av: string[], onde: string): OpcaoEscolha {
   const l = new Leitor(o, av, onde);
   return comExtras({ texto: l.s("texto"), retorno: l.s("retorno") }, l.fim(["texto", "retorno"]));
@@ -358,6 +374,7 @@ const CAMPOS_BLOCO: Record<TipoBloco, readonly string[]> = {
   multipla: ["enunciado", "opcoes", "msgAcerto", "msgRevisar"],
   reflexao: ["pergunta", "aviso", "minChars", "maxChars", "opcional"],
   escolha: ["pergunta", "opcoes"],
+  ramificado: ["perguntas"],
   categorizar: ["enunciado", "categorias", "itens", "msgAcerto", "msgRevisar"],
 };
 
@@ -434,6 +451,13 @@ function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
         tipo,
         pergunta: l.s("pergunta"),
         opcoes: l.objs("opcoes").map((x, k) => lerOpcaoEscolha(x, av, `${onde}, alternativa ${k + 1}`)),
+      };
+      break;
+    case "ramificado":
+      b = {
+        id,
+        tipo,
+        perguntas: l.objs("perguntas").map((x, k) => lerPerguntaRamificada(x, av, `${onde}, pergunta ${k + 1}`)),
       };
       break;
     case "categorizar": {

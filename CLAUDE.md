@@ -24,7 +24,7 @@ npx vitest run -t "nomePacote"               # um teste pelo nome
 cd src-tauri && cargo clippy -- -D warnings
 # runtime: converte os 18 LEITURA2 do ead-scorm, compara com o original (Playwright) e testa bloqueio/conclusão/retomada
 node runtime/test/montar.mjs "$TMPDIR"cev-m0 && node runtime/test/comparar.mjs "$TMPDIR"cev-m0
-node runtime/test/tipos-kit.mjs "$TMPDIR"cev-m6 && node runtime/test/categorizar.mjs "$TMPDIR"cev-m6   # tipos do M6
+node runtime/test/tipos-kit.mjs "$TMPDIR"cev-m6 && node runtime/test/categorizar.mjs "$TMPDIR"cev-m6 && node runtime/test/ramificado.mjs "$TMPDIR"cev-m6   # tipos do M6
 ```
 
 O teste de ouro em `src/modelo/importar.test.ts` lê `~/Dev/ead-scorm/*_LEITURA2/js/data.js`. Se a pasta não existir, ele é pulado.
@@ -81,15 +81,16 @@ window.CONTEUDO = { formato: 2, id: "CTGESTAO_UD11_LEITURA2", contexto, titulo, 
 { tipo: "reflexao", pergunta, aviso?, minChars? (10), maxChars? (500), opcional? (true) }   // envia via Scorm.gravarResposta
 { tipo: "escolha", pergunta, opcoes: [{ texto, retorno }] }                                    // sem gabarito
 { tipo: "categorizar", enunciado, categorias: [texto 2–4], itens: [{ texto, categoria: índice, fb }], msgAcerto?, msgRevisar? }   // "Verificar"
+{ tipo: "ramificado", perguntas: [{ id, enunciado, alternativas: [{ texto, retorno, proxima: id da pergunta | "fim" }] }] }   // uma por vez; resumo + "Registrar respostas"
 ```
 
-Escape: campos HTML e campos simples inseridos via innerHTML são escapados pelo compilador. Já os campos que o motor insere via **textContent** não são escapados: `quiz.explica`, `multipla.opcoes[].fb`, `msgAcerto`, `msgRevisar`, `reflexao.aviso`, `escolha.opcoes[].retorno`, `categorizar.itens[].fb` e `contexto`. Os títulos de `categorizar.categorias` são texto simples e são escapados. Na reflexão, `aviso` ausente usa o texto padrão, e `""` deixa a reflexão sem aviso (o compilador omite o campo quando está vazio).
+Escape: campos HTML e campos simples inseridos via innerHTML são escapados pelo compilador. Já os campos que o motor insere via **textContent** não são escapados: `quiz.explica`, `multipla.opcoes[].fb`, `msgAcerto`, `msgRevisar`, `reflexao.aviso`, `escolha.opcoes[].retorno`, `categorizar.itens[].fb`, `ramificado.perguntas[].alternativas[].retorno` e `contexto`. Os títulos de `categorizar.categorias` são texto simples e são escapados. Na reflexão, `aviso` ausente usa o texto padrão, e `""` deixa a reflexão sem aviso (o compilador omite o campo quando está vazio).
 
 - `Motor.iniciar(conteudo, { chave?, telaInicial?, livre? })`. `livre` é o modo autor: não bloqueia o "Próximo" e esconde o aviso, mas as pendências continuam contando. `telaInicial` tem prioridade sobre `lesson_location`. A chamada devolve `{ ir, tela, total, pendencias, pendenciaTela, concluido }`.
 - Tipo novo de bloco: `Motor.bloco(tipo, { render(b, ctx), pendentes, aviso, falta: [sing, plural], estado, restaurar })`. Tipo desconhecido gera um aviso discreto, sem quebrar.
 - Textos vão por `innerHTML`, então aceitam `<strong>`, `<em>` e `<a target='_blank' rel='noopener'>`.
 - O "Próximo" fica bloqueado até o aluno responder os quizzes, abrir a sugestão de cada `ordenar` e abrir cada `confira`. A conclusão exige isso em todas as telas.
-- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar, confira e reflexao (enviada) = `1`; multipla = índices marcados na última verificação; escolha = índice; categorizar = categoria de cada item na última verificação. O texto da reflexão nunca entra no suspend_data, só em `cmi.interactions`. O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
+- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar, confira e reflexao (enviada) = `1`; multipla = índices marcados na última verificação; escolha = índice; categorizar = categoria de cada item na última verificação; ramificado = `{"r":[alternativa de cada pergunta, -1 = sem resposta],"e":1 se registrado}`. O texto da reflexão nunca entra no suspend_data, só em `cmi.interactions` (o ramificado também grava lá uma interação por pergunta do caminho, `<id do bloco>-P<n>`). O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
 - Diferente do motor antigo: o runtime **não** divide `ordenar` em várias telas (a importação de legado faz isso), e o progresso também é salvo em localStorage fora do LMS.
 - Mudar o runtime exige rodar `runtime/test/` (comparação com o original) e atualizar o `runtime/ORIGEM.md`.
 

@@ -11,6 +11,7 @@ import { FormMultipla } from "./FormMultipla";
 import { FormReflexao } from "./FormReflexao";
 import { FormEscolha } from "./FormEscolha";
 import { FormCategorizar } from "./FormCategorizar";
+import { FormRamificado } from "./FormRamificado";
 
 afterEach(cleanup);
 
@@ -38,6 +39,7 @@ describe("forms dos tipos do M6", () => {
     expect(FORMS_BLOCO.reflexao).toBe(FormReflexao);
     expect(FORMS_BLOCO.escolha).toBe(FormEscolha);
     expect(FORMS_BLOCO.categorizar).toBe(FormCategorizar);
+    expect(FORMS_BLOCO.ramificado).toBe(FormRamificado);
   });
 
   it("reflexão: obrigatória liga opcional=false e desliga removendo o campo", async () => {
@@ -135,5 +137,27 @@ describe("forms dos tipos do M6", () => {
     fireEvent.click(screen.getByRole("button", { name: /Adicionar categoria/ }));
     expect(screen.queryByRole("button", { name: /Adicionar categoria/ })).toBeNull();
     expect(screen.getByText("Máximo de 4.")).toBeTruthy();
+  });
+
+  it("ramificado: destino por alternativa; pergunta removida deixa o destino a escolher", async () => {
+    const ref = montar(FormRamificado, novoBloco("ramificado"));
+    await act(async () => {});
+    const [q1, q2] = ref.atual.perguntas.map((p) => p.id);
+    const destinos = () => screen.getAllByLabelText("Depois desta, ir para") as HTMLSelectElement[];
+    expect(destinos().map((d) => d.value)).toEqual([q2, q2, "fim", "fim"]);
+    // a pergunta não oferece ela mesma como destino
+    expect([...destinos()[0].options].map((o) => o.textContent)).toEqual(["Pergunta 2", "Fim do questionário (resumo)"]);
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar pergunta/ }));
+    const q3 = ref.atual.perguntas[2].id;
+    fireEvent.change(destinos()[1], { target: { value: q3 } });
+    expect(ref.atual.perguntas[0].alternativas[1].proxima).toBe(q3);
+    // nova alternativa na pergunta 1 vai, por padrão, para a pergunta 2
+    fireEvent.click(screen.getAllByRole("button", { name: /Adicionar alternativa/ })[0]);
+    expect(ref.atual.perguntas[0].alternativas[2].proxima).toBe(q2);
+    fireEvent.click(screen.getByRole("button", { name: "Remover pergunta 3" }));
+    expect(ref.atual.perguntas.map((p) => p.id)).toEqual([q1, q2]);
+    expect(destinos()[1].value).toBe("");
+    fireEvent.change(screen.getAllByLabelText("Retorno desta alternativa (opcional)")[0], { target: { value: "Siga." } });
+    expect(ref.atual.perguntas[0].alternativas[0].retorno).toBe("Siga.");
   });
 });

@@ -139,6 +139,16 @@ export function compilarBloco(b: Bloco): BlocoV2 {
         pergunta: b.pergunta,
         opcoes: b.opcoes.map((o) => ({ texto: o.texto, retorno: o.retorno })),
       };
+    case "ramificado":
+      return {
+        id: b.id,
+        tipo: b.tipo,
+        perguntas: b.perguntas.map((p) => ({
+          id: p.id,
+          enunciado: p.enunciado,
+          alternativas: p.alternativas.map((a) => ({ texto: a.texto, retorno: a.retorno, proxima: a.proxima })),
+        })),
+      };
     case "categorizar": {
       const out: Omit<BlocoCategorizar, "extras"> = {
         id: b.id,

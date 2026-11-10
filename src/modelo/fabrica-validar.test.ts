@@ -61,6 +61,13 @@ function blocoValido(tipo: Bloco["tipo"]): Bloco {
         { texto: "Inseguro", retorno: "Revise a seção 2." },
       ];
       break;
+    case "ramificado":
+      b.perguntas = [
+        { id: "q-1", enunciado: "Tem CNPJ?", alternativas: [{ texto: "Sim", retorno: "Ok.", proxima: "q-3" }, { texto: "Não", retorno: "", proxima: "q-2" }] },
+        { id: "q-2", enunciado: "Tem convênio?", alternativas: [{ texto: "Sim", retorno: "", proxima: "q-3" }, { texto: "Não", retorno: "", proxima: "fim" }] },
+        { id: "q-3", enunciado: "Situação?", alternativas: [{ texto: "A", retorno: "", proxima: "fim" }, { texto: "B", retorno: "", proxima: "fim" }] },
+      ];
+      break;
     case "categorizar":
       b.enunciado = "Classifique.";
       b.categorias = ["Adulto", "Autoridades"];
@@ -164,6 +171,14 @@ describe("validar: erros", () => {
     ["multipla com 1 alternativa", (p) => bl(p, "multipla", (b) => b.opcoes.splice(1)), /pelo menos 2 alternativas/],
     ["multipla sem correta", (p) => bl(p, "multipla", (b) => (b.opcoes[0].correta = false)), /marque pelo menos uma alternativa como correta/],
     ["multipla alternativa vazia", (p) => bl(p, "multipla", (b) => (b.opcoes[1].texto = "")), /“Múltipla escolha”, a alternativa 2 está vazia/],
+    ["ramificado sem perguntas", (p) => bl(p, "ramificado", (b) => (b.perguntas = [])), /adicione pelo menos uma pergunta/],
+    ["ramificado sem enunciado", (p) => bl(p, "ramificado", (b) => (b.perguntas[1].enunciado = "")), /falta o enunciado da pergunta 2/],
+    ["ramificado com 1 alternativa", (p) => bl(p, "ramificado", (b) => b.perguntas[2].alternativas.splice(1)), /pergunta 3 precisa de pelo menos 2/],
+    ["ramificado alternativa vazia", (p) => bl(p, "ramificado", (b) => (b.perguntas[0].alternativas[1].texto = "")), /alternativa 2 da pergunta 1 está vazia/],
+    ["ramificado destino inexistente", (p) => bl(p, "ramificado", (b) => (b.perguntas[0].alternativas[0].proxima = "q-9")), /pergunta que não existe mais/],
+    ["ramificado para si mesma", (p) => bl(p, "ramificado", (b) => (b.perguntas[1].alternativas[1].proxima = "q-2")), /leva para a própria pergunta/],
+    ["ramificado com ciclo", (p) => bl(p, "ramificado", (b) => (b.perguntas[2].alternativas[0].proxima = "q-1")), /pergunta 3 leva de volta à pergunta 1/],
+    ["ramificado id repetido", (p) => bl(p, "ramificado", (b) => (b.perguntas[2].id = "q-2")), /identificador repetido/],
     ["categorizar sem enunciado", (p) => bl(p, "categorizar", (b) => (b.enunciado = "")), /“Classificar em categorias”, falta o enunciado/],
     ["categorizar com 1 categoria", (p) => bl(p, "categorizar", (b) => b.categorias.splice(1)), /pelo menos 2 categorias/],
     ["categorizar com 5 categorias", (p) => bl(p, "categorizar", (b) => b.categorias.push("c", "d", "e")), /no máximo 4 categorias/],
@@ -269,13 +284,31 @@ describe("validar: avisos", () => {
     expect(avisos(p).map((x) => x.mensagem)[0]).toMatch(/a alternativa 1 está sem comentário/);
   });
 
+  it("ramificado: pergunta que nenhum caminho alcança é aviso", () => {
+    const p = projetoValido();
+    bl(p, "ramificado", (b) => (b.perguntas[0].alternativas[1].proxima = "q-3"));
+    expect(erros(p)).toEqual([]);
+    const a = avisos(p);
+    expect(a.map((x) => x.mensagem)).toEqual([
+      "Tela 2: no bloco “Questionário com caminhos”, nenhum caminho chega à pergunta 2. Confira o “Depois desta, ir para” das perguntas anteriores.",
+    ]);
+    expect(a[0].campo).toBe("perguntas[1].enunciado");
+  });
+
+  it("ramificado: a fábrica cria 1 → 2 → fim, válido depois de preenchido", () => {
+    const b = novoBloco("ramificado");
+    expect(b.perguntas).toHaveLength(2);
+    expect(b.perguntas[0].alternativas.map((a) => a.proxima)).toEqual([b.perguntas[1].id, b.perguntas[1].id]);
+    expect(b.perguntas[1].alternativas.map((a) => a.proxima)).toEqual(["fim", "fim"]);
+  });
+
   it("categorizar: categoria sem itens e itens demais são avisos, não erros", () => {
     const p = projetoValido();
     bl(p, "categorizar", (b) => b.categorias.push("Ninguém", "Outros"));
     expect(erros(p)).toEqual([]);
     const a = avisos(p);
     expect(a.map((x) => x.mensagem)).toEqual([
-      "Tela 2: no bloco “Classificar em categorias”, nenhum item pertence às categorias 3 e 4. Confira se é isso mesmo.",
+      "Tela 2: no bloco “Classificar em categorias”, nenhum item pertence às categorias “Ninguém” e “Outros”. Confira se é isso mesmo.",
     ]);
     expect(a[0].campo).toBe("categorias[2]");
     bl(p, "categorizar", (b) => {
@@ -284,7 +317,7 @@ describe("validar: avisos", () => {
     });
     expect(erros(p)).toEqual([]);
     expect(avisos(p).map((x) => x.mensagem)).toEqual([
-      "Tela 2: o bloco “Classificar em categorias” tem 11 itens. Com mais de 10, a atividade fica longa no celular; considere dividir em duas telas.",
+      "Tela 2: o bloco “Classificar em categorias” tem 11 itens. Com mais de 8, a atividade fica longa no celular; considere até 3 categorias e 8 itens, ou dividir em duas telas.",
     ]);
   });
 

@@ -84,13 +84,14 @@ const estadoCat = (f) => f.$eval(A + ".bloco-q.categorizar", (box) => {
   return [...box.querySelectorAll(".cat-item")].sort((a, b) => a.dataset.item - b.dataset.item).map((bt) => {
     const z = bt.closest(".cat-zona");
     const fb = bt.parentNode.querySelector(".fb");
-    return { c: z ? zonas.indexOf(z) : -1, cls: ["ok", "erro"].filter((c) => bt.classList.contains(c)).join(""), fb: fb.hidden ? null : fb.textContent, dis: bt.disabled };
+    return { c: z ? zonas.indexOf(z) : -1, cls: ["ok", "erro"].filter((c) => bt.classList.contains(c)).join(""), fb: fb.hidden ? null : fb.textContent, dis: bt.getAttribute("aria-disabled") === "true" };
   });
 });
 const ondeEsta = async (f) => (await estadoCat(f)).map((x) => x.c);
 const item = (i) => A + `.cat-item[data-item="${i}"]`;
 const alvo = (c) => A + `.cat-zona:nth-child(${c + 1}) .cat-alvo`;
-const status = (f) => f.$eval(A + ".bloco-q.categorizar .sr-only", (e) => e.textContent);
+const status = async (f) => { await f.waitForTimeout(120); return f.$eval(A + ".bloco-q.categorizar .sr-only", (e) => e.textContent); };
+const focado = (f) => f.evaluate(() => { const a = document.activeElement; return a.dataset.item != null ? "item" + a.dataset.item : a.className; });
 // Arrasta com o mouse; se o destino estiver fora da área visível, segura o item na borda
 // até a rolagem automática trazê-lo para a tela (como faria um usuário no celular)
 async function arrastar(page, f, de, para) {
@@ -146,13 +147,18 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
   await f.click(item(1)); await f.click(item(1));
   eq(await f.$eval(item(1), (b) => b.getAttribute("aria-pressed")), "false", `${W} desmarcar seleção`);
 
-  // teclado: Enter no item, foco na categoria, Enter; Escape cancela
+  // teclado: Enter no item leva o foco à 1ª categoria; Escape cancela e devolve o foco ao item
   await f.focus(item(2)); await page.keyboard.press("Enter");
+  eq(await focado(f), "cat-alvo", `${W} Enter no item foca a categoria`);
   await page.keyboard.press("Escape");
   eq(await f.$eval(item(2), (b) => b.getAttribute("aria-pressed")), "false", `${W} Escape cancela`);
+  eq(await focado(f), "item2", `${W} Escape devolve o foco ao item`);
   await page.keyboard.press("Enter");
-  await f.focus(alvo(1)); await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
   eq(await ondeEsta(f), [0, -1, 1, -1], `${W} teclado`);
+  eq(await focado(f), "item2", `${W} foco fica no item colocado`);
+  eq(await status(f), "“Comunicar pelos canais oficiais” colocado em “Autoridades”.", `${W} anúncio (teclado)`);
   eq(await counter(f), "02 / 04", `${W} teclado não troca de tela`);
 
   // arrastar com o mouse (inclusive de uma zona para outra)
@@ -168,14 +174,19 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
   // verificar: item 2 errado
   await f.click(A + ".bloco-q .btn-act:not(.sec)");
   eq(await estadoCat(f), [
-    { c: 0, cls: "ok", fb: "Acolher é papel de quem recebe o relato.", dis: true },
-    { c: 1, cls: "ok", fb: "Investigar é papel das autoridades, não do grupo.", dis: true },
-    { c: 1, cls: "erro", fb: "Não é desta categoria.", dis: true },
-    { c: 1, cls: "ok", fb: "Medidas protetivas são do Conselho Tutelar e da Justiça.", dis: true },
+    { c: 0, cls: "ok", fb: "Certo. Acolher é papel de quem recebe o relato.", dis: true },
+    { c: 1, cls: "ok", fb: "Certo. Investigar é papel das autoridades, não do grupo.", dis: true },
+    { c: 1, cls: "erro", fb: "Errado. O lugar dele é “Adulto voluntário”.", dis: true },
+    { c: 1, cls: "ok", fb: "Certo. Medidas protetivas são do Conselho Tutelar e da Justiça.", dis: true },
   ], `${W} marcas após verificar`);
+  eq(await f.evaluate(() => document.activeElement.textContent), "Tentar de novo", `${W} foco em Tentar de novo`);
+  // item travado continua no Tab e não se move
+  await f.focus(item(2)); await page.keyboard.press("Enter");
+  eq(await f.$eval(item(2), (b) => b.getAttribute("aria-pressed")), "false", `${W} item travado não seleciona`);
   eq(await resultado(f, A + ".bloco-q"), "resultado parcial|Revise os itens marcados. (3 de 4 no lugar certo.)", `${W} msgRevisar`);
   ok(await f.$eval(A + ".cat-bandeja", (e) => e.hidden), `${W} bandeja some após verificar`);
-  eq(await f.evaluate(() => document.activeElement.textContent), "Tentar de novo", `${W} foco em Tentar de novo`);
+  await f.focus(A + ".btn-act.sec");
+  eq(await f.evaluate(() => document.activeElement.textContent), "Tentar de novo", `${W} Tentar de novo focável`);
   ok(!(await nextDis(f)), `${W} libera após verificar`);
   eq(JSON.parse((await lms(page))["cmi.suspend_data"]).b["1.0"], [0, 1, 1, 1], `${W} estado salvo`);
   const lay = await layout(f);
@@ -213,10 +224,10 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
   await page.evaluate(() => document.getElementById("f").contentWindow.document.getElementById("prev").click());
   eq(await counter(f), "02 / 04", `${W} retomada: tela 2`);
   eq(await estadoCat(f), [
-    { c: 0, cls: "ok", fb: "Acolher é papel de quem recebe o relato.", dis: true },
-    { c: 1, cls: "ok", fb: "Investigar é papel das autoridades, não do grupo.", dis: true },
-    { c: 0, cls: "ok", fb: null, dis: true },
-    { c: 1, cls: "ok", fb: "Medidas protetivas são do Conselho Tutelar e da Justiça.", dis: true },
+    { c: 0, cls: "ok", fb: "Certo. Acolher é papel de quem recebe o relato.", dis: true },
+    { c: 1, cls: "ok", fb: "Certo. Investigar é papel das autoridades, não do grupo.", dis: true },
+    { c: 0, cls: "ok", fb: "Certo.", dis: true },
+    { c: 1, cls: "ok", fb: "Certo. Medidas protetivas são do Conselho Tutelar e da Justiça.", dis: true },
   ], `${W} retomada restaura`);
   ok(!(await nextDis(f)), `${W} retomada: liberada`);
   await ctx.close();

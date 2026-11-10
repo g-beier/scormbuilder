@@ -88,6 +88,25 @@ export interface ItemCategorizar {
   extras?: Extras;
 }
 
+export interface AlternativaRamificada {
+  /** HTML (texto rico inline). */
+  texto: string;
+  /** Retorno desta alternativa (texto simples). Pode ficar vazio. */
+  retorno: string;
+  /** Id da pergunta seguinte (do mesmo bloco) ou "fim". */
+  proxima: string;
+  extras?: Extras;
+}
+
+export interface PerguntaRamificada {
+  /** Id curto estável (`q-xxxxxxxx`), único no bloco; é o alvo de `proxima`. */
+  id: string;
+  /** HTML (texto rico inline). */
+  enunciado: string;
+  alternativas: AlternativaRamificada[];
+  extras?: Extras;
+}
+
 // ---------- Blocos ----------
 
 interface BlocoBase {
@@ -186,7 +205,7 @@ export interface BlocoEscolha extends BlocoBase {
 }
 
 /** Limites de categorias do bloco "categorizar" (o runtime tem 4 cores). */
-export const LIMITES_CATEGORIZAR = { minCategorias: 2, maxCategorias: 4, minItens: 2, itensAviso: 10 } as const;
+export const LIMITES_CATEGORIZAR = { minCategorias: 2, maxCategorias: 4, minItens: 2, itensAviso: 8 } as const;
 
 /** Classificar: o aluno coloca cada item numa categoria e clica "Verificar". */
 export interface BlocoCategorizar extends BlocoBase {
@@ -199,6 +218,16 @@ export interface BlocoCategorizar extends BlocoBase {
   msgAcerto?: string;
   /** Texto simples; vazio = mensagem padrão do motor. */
   msgRevisar?: string;
+}
+
+/**
+ * Questionário com caminhos (modelo UD11_QUIZ): uma pergunta por vez, sem nota;
+ * cada alternativa tem retorno e diz qual é a próxima pergunta. No fim, o aluno
+ * vê o resumo e registra as respostas (cmi.interactions).
+ */
+export interface BlocoRamificado extends BlocoBase {
+  tipo: "ramificado";
+  perguntas: PerguntaRamificada[];
 }
 
 export type Bloco =
@@ -215,7 +244,8 @@ export type Bloco =
   | BlocoMultipla
   | BlocoReflexao
   | BlocoEscolha
-  | BlocoCategorizar;
+  | BlocoCategorizar
+  | BlocoRamificado;
 
 export type TipoBloco = Bloco["tipo"];
 export const TIPOS_BLOCO: readonly TipoBloco[] = [
@@ -233,6 +263,7 @@ export const TIPOS_BLOCO: readonly TipoBloco[] = [
   "reflexao",
   "escolha",
   "categorizar",
+  "ramificado",
 ];
 
 // ---------- Slides ----------
@@ -323,6 +354,7 @@ export const NOMES_BLOCO: Record<TipoBloco, string> = {
   reflexao: "Reflexão",
   escolha: "Escolha com retorno",
   categorizar: "Classificar em categorias",
+  ramificado: "Questionário com caminhos",
 };
 
 export const NOMES_SLIDE: Record<TipoSlide, string> = {

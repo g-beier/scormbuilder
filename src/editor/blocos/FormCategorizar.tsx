@@ -6,7 +6,7 @@ import type { PropsFormBloco } from "./comum";
 
 /** Mensagens que o motor mostra quando os campos ficam vazios. */
 export const MSG_ACERTO_CATEGORIZAR = "Muito bem: todos os itens estão na categoria certa.";
-export const MSG_REVISAR_CATEGORIZAR = "Alguns itens merecem revisão. Veja os comentários marcados em vermelho.";
+export const MSG_REVISAR_CATEGORIZAR = "Alguns itens merecem revisão. Veja o comentário de cada item.";
 
 /** Nome da categoria para listas e seletores: o título, ou "Categoria n" se ainda vazio. */
 function nomeCategoria(titulo: string, k: number): string {
@@ -74,7 +74,7 @@ export function FormCategorizar({ bloco, editar, f }: PropsFormBloco<BlocoCatego
       />
       <ListaEditavel
         titulo="Itens"
-        ajuda="O aluno vê os itens embaralhados numa bandeja, leva cada um para uma categoria e clica em “Verificar”. Cada item fica verde ou vermelho e mostra o seu comentário. Ele precisa verificar ao menos uma vez para avançar e pode tentar de novo."
+        ajuda="O aluno vê os itens embaralhados e leva cada um para uma categoria. Depois clica em “Verificar”: cada item mostra se está certo ou errado, com o seu comentário. Para avançar, ele precisa verificar ao menos uma vez, mas pode tentar de novo."
         emCaixa
         itens={bloco.itens}
         rotuloItem={(i) => `Item ${i + 1}`}
@@ -100,7 +100,7 @@ export function FormCategorizar({ bloco, editar, f }: PropsFormBloco<BlocoCatego
             />
             <CampoTexto
               rotulo="Comentário deste item (opcional)"
-              ajuda="Aparece quando o aluno verifica. Se o item estiver na categoria errada, vem antes “Não é desta categoria.”. Texto simples, sem formatação."
+              ajuda="Aparece quando o aluno verifica, depois de “Certo.” ou de “Errado. O lugar dele é …”. Texto simples, sem formatação."
               multilinha
               valor={it.fb}
               foco={f(`itens[${i}].fb`)}
@@ -155,7 +155,10 @@ function SeletorCategoria({
   return (
     <div className="campo">
       <label htmlFor={id}>Categoria certa</label>
-      <select id={id} value={valida ? String(valor) : ""} data-foco={foco} onChange={(e) => aoMudar(e.target.value === "" ? -1 : Number(e.target.value))}>
+      <p id={`${id}-ajuda`} className="ajuda">
+        A categoria onde este item deve ficar.
+      </p>
+      <select id={id} aria-describedby={`${id}-ajuda`} value={valida ? String(valor) : ""} data-foco={foco} onChange={(e) => aoMudar(e.target.value === "" ? -1 : Number(e.target.value))}>
         {!valida && <option value="">Escolha a categoria…</option>}
         {categorias.map((c, k) => (
           <option key={k} value={String(k)}>

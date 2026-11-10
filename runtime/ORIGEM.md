@@ -41,9 +41,20 @@ Teste: `node runtime/test/tipos-kit.mjs "$TMPDIR"cev-m6` monta um pacote com a f
 
 Tipo novo, sem equivalente no kit nem nos pacotes do ead-scorm. Visual montado com os tokens e peças já aprovados (`.bloco-q`, `.btn-act`, `.resultado`, `.fb`, borda superior colorida com as 4 cores do tema).
 
-- `categorizar`: itens (`button.cat-item`, `aria-pressed`) começam numa bandeja e vão para as categorias (`.cat-zona`, até 4, empilhadas abaixo de 520px). Três formas de mover: arrastar com o ponteiro (com rolagem automática do `#stage` perto da borda); tocar no item e depois no título da categoria (`button.cat-alvo`, ativo só com um item selecionado); ou teclado (Tab, Enter/Espaço no item, Tab até a categoria, Enter; Escape cancela). Cada movimento é anunciado numa região `aria-live` escondida.
-- "Verificar" exige todos os itens colocados; pinta cada item de verde/vermelho, mostra `fb` (com "Não é desta categoria." antes, se errado) e o resultado com "(n de m no lugar certo.)". "Tentar de novo" mantém as posições e destrava. Pendência: verificar uma vez.
+- `categorizar`: itens (`button.cat-item`, `aria-pressed`) começam numa bandeja e vão para as categorias (`.cat-zona`, até 4, empilhadas abaixo de 520px). Três formas de mover: arrastar com o ponteiro (com rolagem automática do `#stage` perto da borda); tocar no item e depois no título da categoria (`button.cat-alvo`, ativo só com um item selecionado); ou teclado (Tab, Enter/Espaço no item, Tab até a categoria, Enter; Escape cancela). Cada movimento é anunciado numa região `aria-live` escondida (limpa antes de escrever, para repetir frases iguais). Os itens aparecem embaralhados. Enter/Espaço num item leva o foco à primeira categoria e, enquanto houver seleção, os outros itens saem da ordem de Tab; depois de colocar, o foco fica no item movido; Escape devolve o foco ao item.
+- "Verificar" exige todos os itens colocados; pinta cada item de verde/vermelho e escreve "Certo." ou "Errado. O lugar dele é “<categoria>”." antes do `fb` (o resultado não depende só da cor), e mostra o resumo com "(n de m no lugar certo.)". Itens verificados ficam com `aria-disabled` (continuam no Tab, com o retorno em `aria-describedby`). "Tentar de novo" mantém as posições e destrava. Os listeners de arrasto no `document` só existem durante o arrasto. Pendência: verificar uma vez.
 - `suspend_data`: a categoria de cada item na última verificação, na ordem do `data.js` (ex.: `[0,1,1,0]`). Estado com tamanho ou índice inválido é ignorado.
 - Motor: o gesto de deslizar não começa sobre um `.cat-item`.
 
 Teste: `node runtime/test/categorizar.mjs "$TMPDIR"cev-m6` (fixture `test/fixtures/categorizar-v2.data.js`; 1200x666 e 375x666; clique, teclado, arrastar com rolagem, verificação, retomada, estado inválido, conclusão). O `comparar.mjs` passou a usar `tipo-inexistente` como exemplo de tipo desconhecido e espera 200 ms (em vez de 30) pelo `toggle` do `<details>`, que falhava de forma intermitente.
+
+## Questionário com caminhos (M6, parte 3)
+
+Portado do `CTGESTAO_UD11_QUIZ/js/app.js` (caminho pelas respostas, `proxima` por alternativa, resumo e registro), como **bloco** dentro de uma tela de conteúdo, não como tela especial: assim ele usa a navegação, o bloqueio do "Próximo" e a conclusão do motor sem mudar nada no núcleo.
+
+- `ramificado`: mostra uma pergunta por vez ("Pergunta n", rádios `.opcao` num `radiogroup`, retorno no card "Retorno" igual ao da `escolha`). "Próxima pergunta" segue a `proxima` da alternativa escolhida (vira "Ver resumo" quando é `"fim"`); "Voltar" refaz o caminho percorrido. O foco vai para o enunciado de cada pergunta e para o título do resumo.
+- Diferenças do UD11: `proxima` é o **id** da pergunta (não o número), para que reordenar perguntas no editor não quebre os caminhos; o resumo lista só as perguntas do caminho, com o número original; não há menu lateral nem a "situação registrada" específica da UD11; a interação gravada é `<id do bloco>-P<n>` com "Pergunta n: <texto da alternativa>".
+- Pendência: registrar uma vez (exige o caminho completo). Depois de registrado, as alternativas ficam travadas e o resumo mostra "✓ Respostas registradas.". Se a gravação falhar, aparece a mesma mensagem da reflexão e nada é perdido.
+- Retomada: volta para a primeira pergunta sem resposta do caminho, ou para o resumo. Um destino inválido ou um ciclo encerram o caminho em vez de travar (o editor impede os dois).
+
+Teste: `node runtime/test/ramificado.mjs "$TMPDIR"cev-m6` (fixture `test/fixtures/ramificado-v2.data.js`).

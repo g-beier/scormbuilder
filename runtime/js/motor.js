@@ -1111,9 +1111,10 @@ var Motor = (function () {
   // Estado = categoria de cada item (na ordem do data.js) na última verificação.
   // =====================================================================
 
-  // Coloca cada item no seu recipiente (bandeja = -1), na ordem do data.js
+  // Coloca cada item no seu recipiente (bandeja = -1), na ordem embaralhada da instância
   function distribuirCat(ui, pos) {
-    pos.forEach(function (c, i) {
+    ui.ordem.forEach(function (i) {
+      var c = pos[i];
       var alvo = c >= 0 && ui.zonas[c] ? ui.zonas[c].lista : ui.bandeja;
       alvo.appendChild(ui.itens[i].li);
     });
@@ -1123,7 +1124,7 @@ var Motor = (function () {
   function limparMarcasCat(ui) {
     ui.itens.forEach(function (it) {
       it.bt.classList.remove("ok", "erro");
-      it.bt.disabled = false;
+      it.bt.removeAttribute("aria-disabled");
       it.bt.removeAttribute("aria-describedby");
       it.fb.hidden = true;
       it.fb.textContent = "";
@@ -1138,13 +1139,16 @@ var Motor = (function () {
       var o = (b.itens || [])[i] || {};
       var fbTxt = o.fb == null ? "" : String(o.fb);
       var ok = pos[i] === o.categoria;
-      it.bt.disabled = true;
+      var certa = ui.zonas[o.categoria] ? (ui.zonas[o.categoria].titulo.textContent || "").trim() : "";
+      // Travado, mas focável (aria-disabled): o retorno continua acessível pelo Tab
+      it.bt.setAttribute("aria-disabled", "true");
       it.bt.setAttribute("aria-pressed", "false");
       it.bt.classList.remove("ok", "erro", "sel");
       it.bt.classList.add(ok ? "ok" : "erro");
-      it.fb.textContent = ok ? fbTxt : ("Não é desta categoria. " + fbTxt).replace(/ $/, "");
-      it.fb.hidden = !it.fb.textContent;
-      if (!it.fb.hidden) it.bt.setAttribute("aria-describedby", it.fb.id);
+      // Certo/errado também em texto, não só pela cor
+      it.fb.textContent = ((ok ? "Certo." : "Errado." + (certa ? " O lugar dele é “" + certa + "”." : "")) + " " + fbTxt).replace(/ $/, "");
+      it.fb.hidden = false;
+      it.bt.setAttribute("aria-describedby", it.fb.id);
       if (ok) certos++;
     });
     ui.zonas.forEach(function (z) { z.alvo.disabled = true; });
@@ -1153,7 +1157,7 @@ var Motor = (function () {
     var n = ui.itens.length;
     ui.res.appendChild(certos === n
       ? texto("div", "resultado bom", b.msgAcerto || "Muito bem: todos os itens estão na categoria certa.")
-      : texto("div", "resultado parcial", (b.msgRevisar || "Alguns itens merecem revisão. Veja os comentários marcados em vermelho.") +
+      : texto("div", "resultado parcial", (b.msgRevisar || "Alguns itens merecem revisão. Veja o comentário de cada item.") +
           " (" + certos + " de " + n + " no lugar certo.)"));
     ui.ver.hidden = true;
     ui.ref.hidden = false;
@@ -1162,8 +1166,8 @@ var Motor = (function () {
   bloco("categorizar", {
     aviso: "Classifique os itens e verifique para avançar.",
     falta: ["atividade de classificar ainda não verificada", "atividades de classificar ainda não verificadas"],
-    ordemAviso: 6,
-    ordemFalta: 6,
+    ordemAviso: 7,
+    ordemFalta: 7,
     render: function (b, ctx) {
       var cats = b.categorias || [];
       var itensB = b.itens || [];
@@ -1173,7 +1177,7 @@ var Motor = (function () {
 
       var cx = caixaPergunta(ctx, "categorizar", b.enunciado);
       cx.box.appendChild(texto("p", "flow-help",
-        "Arraste cada item para a categoria certa. Também dá para tocar no item e depois na categoria (no teclado: Tab, Enter no item, Tab até a categoria e Enter)."));
+        "Arraste cada item para a categoria certa, ou toque no item e depois na categoria. No teclado: Enter no item e depois Enter na categoria."));
 
       var status = el("p", "sr-only");
       status.setAttribute("aria-live", "polite");
@@ -1185,7 +1189,7 @@ var Motor = (function () {
       var bandeja = el("ul", "cat-lista");
       bandeja.setAttribute("aria-labelledby", bandejaRot.id);
       bandejaBox.appendChild(bandeja);
-      var tudoFeito = texto("p", "cat-bandeja-ok", "Todos os itens já estão numa categoria. Para trocar um item de lugar, toque nele e depois na outra categoria.");
+      var tudoFeito = texto("p", "cat-bandeja-ok", "Todos os itens já estão numa categoria. Para trocar um item de lugar, selecione-o e escolha outra categoria.");
       bandejaBox.appendChild(tudoFeito);
       cx.box.appendChild(bandejaBox);
 
@@ -1235,52 +1239,70 @@ var Motor = (function () {
       cx.box.appendChild(acoes);
       cx.box.appendChild(status);
 
-      var ui = ctx.ui = { itens: itens, zonas: zonas, bandeja: bandeja, bandejaBox: bandejaBox, res: res, ver: ver, ref: ref };
+      var ui = ctx.ui = { itens: itens, zonas: zonas, bandeja: bandeja, bandejaBox: bandejaBox, res: res, ver: ver, ref: ref,
+                          ordem: embaralhar(itens.length) };
       distribuirCat(ui, ctx.pos);
 
       function nomeItem(i) { return (itens[i].bt.textContent || "").trim(); }
       function nomeCat(c) { return (zonas[c].titulo.textContent || "").trim(); }
+      function travado(bt) { return bt.getAttribute("aria-disabled") === "true"; }
+      // Limpa antes de escrever, para que leitores de tela repitam uma frase igual à anterior
+      var anuncioT = 0;
+      function anunciar(t) {
+        status.textContent = "";
+        clearTimeout(anuncioT);
+        anuncioT = setTimeout(function () { status.textContent = t; }, 60);
+      }
 
       function selecionar(i) {
         ctx.sel = i;
         itens.forEach(function (it, k) {
           it.bt.classList.toggle("sel", k === i);
           it.bt.setAttribute("aria-pressed", k === i ? "true" : "false");
+          // Com um item selecionado, o Tab vai direto de uma categoria para a outra
+          it.bt.tabIndex = (i != null && k !== i) ? -1 : 0;
         });
         zonas.forEach(function (z) { z.alvo.disabled = i == null; });
         grade.classList.toggle("escolhendo", i != null);
-        if (i != null) status.textContent = "“" + nomeItem(i) + "” selecionado. Escolha a categoria.";
+        if (i != null) anunciar("“" + nomeItem(i) + "” selecionado. Escolha a categoria.");
       }
 
+      // Depois de mover, o foco fica no item (já na nova lista); o anúncio diz onde ele foi parar
       function mover(i, c) {
-        var foco = document.activeElement === itens[i].bt;
         ctx.pos[i] = c;
         res.innerHTML = "";
         distribuirCat(ui, ctx.pos);
         selecionar(null);
-        status.textContent = "“" + nomeItem(i) + "” colocado em “" + nomeCat(c) + "”.";
-        if (foco) itens[i].bt.focus();
+        anunciar("“" + nomeItem(i) + "” colocado em “" + nomeCat(c) + "”.");
+        itens[i].bt.focus();
       }
 
       var aposArrastar = false;
       itens.forEach(function (it, i) {
-        it.bt.addEventListener("click", function () {
+        it.bt.addEventListener("click", function (e) {
           if (aposArrastar) { aposArrastar = false; return; }
-          selecionar(ctx.sel === i ? null : i);
+          if (travado(it.bt)) return;
+          var nova = ctx.sel === i ? null : i;
+          selecionar(nova);
+          // Pelo teclado (Enter/Espaço), o foco já vai para a primeira categoria
+          if (nova != null && e.detail === 0 && zonas[0]) zonas[0].alvo.focus();
         });
       });
 
       zonas.forEach(function (z, c) {
         z.alvo.addEventListener("click", function () {
           if (ctx.sel == null) return;
-          var i = ctx.sel;
-          mover(i, c);
-          z.alvo.focus();
+          mover(ctx.sel, c);
         });
       });
 
       cx.box.addEventListener("keydown", function (e) {
-        if (e.key === "Escape" && ctx.sel != null) { selecionar(null); status.textContent = "Seleção cancelada."; }
+        if (e.key === "Escape" && ctx.sel != null) {
+          var i = ctx.sel;
+          selecionar(null);
+          anunciar("Seleção cancelada.");
+          itens[i].bt.focus();
+        }
       });
 
       // Arrastar com o ponteiro (mouse, toque, caneta). Perto da borda de cima ou de baixo
@@ -1313,11 +1335,14 @@ var Motor = (function () {
       }
       grade.parentNode.addEventListener("pointerdown", function (e) {
         var bt = e.target.closest && e.target.closest(".cat-item");
-        if (!bt || bt.disabled || e.button > 0) return;
+        if (!bt || travado(bt) || e.button > 0) return;
+        document.addEventListener("pointermove", aoMover);
+        document.addEventListener("pointerup", soltar);
+        document.addEventListener("pointercancel", soltar);
         drag = { bt: bt, i: Number(bt.getAttribute("data-item")), x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY,
                  top0: palco.scrollTop, ativo: false, id: e.pointerId, raf: 0 };
       });
-      document.addEventListener("pointermove", function (e) {
+      function aoMover(e) {
         if (!drag || e.pointerId !== drag.id) return;
         drag.cx = e.clientX;
         drag.cy = e.clientY;
@@ -1331,11 +1356,14 @@ var Motor = (function () {
         }
         e.preventDefault();
         acompanhar();
-      });
+      }
       function soltar(e) {
         if (!drag || e.pointerId !== drag.id) return;
         var d = drag;
         drag = null;
+        document.removeEventListener("pointermove", aoMover);
+        document.removeEventListener("pointerup", soltar);
+        document.removeEventListener("pointercancel", soltar);
         if (!d.ativo) return;
         window.cancelAnimationFrame(d.raf);
         aposArrastar = true;
@@ -1347,8 +1375,6 @@ var Motor = (function () {
         grade.classList.toggle("escolhendo", ctx.sel != null);
         if (z) mover(d.i, Number(z.getAttribute("data-cat")));
       }
-      document.addEventListener("pointerup", soltar);
-      document.addEventListener("pointercancel", soltar);
 
       ver.addEventListener("click", function () {
         var faltam = ctx.pos.filter(function (c) { return c < 0; }).length;
@@ -1387,6 +1413,252 @@ var Motor = (function () {
       ctx.resp = valor.slice();
       ctx.pos = valor.slice();
       aplicarCategorizar(b, ctx.ui, ctx.resp);
+    }
+  });
+
+  // =====================================================================
+  // Questionário com caminhos (M6). Modelo: ead-scorm/CTGESTAO_UD11_QUIZ (app.js).
+  // Uma pergunta por vez, sem nota; cada alternativa tem retorno (textContent) e
+  // "proxima" (id de outra pergunta do bloco, ou "fim"). No fim, resumo do caminho
+  // e "Registrar respostas" (Scorm.gravarResposta, uma interação por pergunta).
+  // Estado: {"r":[alternativa de cada pergunta, -1 = sem resposta],"e":1 se registrado}.
+  // =====================================================================
+
+  function textoPuro(html) {
+    var d = document.createElement("div");
+    d.innerHTML = html == null ? "" : String(html);
+    return (d.textContent || "").replace(/\s+/g, " ").replace(/^ | $/g, "");
+  }
+
+  bloco("ramificado", {
+    aviso: "Responda o questionário até o fim e registre as respostas para avançar.",
+    falta: ["questionário ainda não registrado", "questionários ainda não registrados"],
+    ordemAviso: 8,
+    ordemFalta: 8,
+    render: function (b, ctx) {
+      var P = b.perguntas || [];
+      var N = P.length;
+      var idx = {};
+      P.forEach(function (p, k) { if (p && p.id != null) idx[p.id] = k; });
+      ctx.r = P.map(function () { return -1; });
+      ctx.e = false;
+      ctx.hist = [];
+      ctx.vista = 0;   // índice da pergunta à mostra, ou "fim"
+
+      var box = el("div", "bloco-q ramificado");
+      var base = "kr" + ctx.seq("ram");
+
+      function alt(k) { var p = P[k]; return p && ctx.r[k] >= 0 ? (p.alternativas || [])[ctx.r[k]] : null; }
+      function destino(k) {
+        var a = alt(k);
+        if (!a) return null;
+        if (a.proxima === "fim" || !idx.hasOwnProperty(a.proxima) || idx[a.proxima] === k) return "fim";
+        return idx[a.proxima];
+      }
+      // Perguntas do caminho a partir da 1; para na primeira sem resposta
+      function caminho() {
+        var seq = [], k = 0, vistos = {};
+        while (k !== "fim" && k != null && k < N && !vistos[k]) {
+          vistos[k] = true;
+          seq.push(k);
+          k = destino(k);
+        }
+        return seq;
+      }
+      ctx.caminho = caminho;
+      function completo() { var c = caminho(); return c.length > 0 && destino(c[c.length - 1]) === "fim"; }
+
+      // ---------- telas das perguntas ----------
+      var telas = P.map(function (p, k) {
+        var sec = el("div", "ram-pergunta");
+        sec.hidden = true;
+        sec.appendChild(texto("p", "ram-num", "Pergunta " + (k + 1)));
+        var perg = el("p", "bloco-perg", p.enunciado || "");
+        perg.id = base + "p" + k;
+        perg.tabIndex = -1;
+        sec.appendChild(perg);
+        var grupo = el("div", "opcoes");
+        grupo.setAttribute("role", "radiogroup");
+        grupo.setAttribute("aria-labelledby", perg.id);
+        var ops = (p.alternativas || []).map(function (a, j) {
+          var lab = el("label", "opcao");
+          var inp = el("input");
+          inp.type = "radio";
+          inp.name = base + "q" + k;
+          inp.value = String(j);
+          lab.appendChild(inp);
+          lab.appendChild(el("span", "opcao-txt", a.texto || ""));
+          grupo.appendChild(lab);
+          inp.addEventListener("change", function () {
+            if (!inp.checked || ctx.e) return;
+            ctx.r[k] = j;
+            atualizarPergunta(k);
+            ctx.mudou();
+          });
+          return { lab: lab, inp: inp };
+        });
+        sec.appendChild(grupo);
+        var ret = el("div", "escolha-retorno");
+        ret.setAttribute("aria-live", "polite");
+        sec.appendChild(ret);
+        var acoes = el("div", "acoes ram-nav");
+        var volta = botao("btn-act sec", "Voltar");
+        var prox = botao("btn-act", "Próxima pergunta");
+        acoes.appendChild(volta);
+        acoes.appendChild(prox);
+        sec.appendChild(acoes);
+        volta.addEventListener("click", function () { mostrar(ctx.hist.length ? ctx.hist.pop() : 0, true); });
+        prox.addEventListener("click", function () {
+          var d = destino(k);
+          if (d == null) return;
+          ctx.hist.push(k);
+          mostrar(d, true);
+        });
+        box.appendChild(sec);
+        return { sec: sec, perg: perg, ops: ops, ret: ret, volta: volta, prox: prox };
+      });
+
+      function atualizarPergunta(k) {
+        var t = telas[k], a = alt(k);
+        t.ops.forEach(function (op, j) {
+          op.inp.checked = (j === ctx.r[k]);
+          op.inp.disabled = ctx.e;
+          op.lab.classList.toggle("escolhida", j === ctx.r[k]);
+          op.lab.classList.toggle("travada", ctx.e);
+        });
+        t.ret.innerHTML = "";
+        if (a && a.retorno) {
+          var card = el("div", "card pergunta");
+          card.appendChild(texto("h3", null, "Retorno"));
+          card.appendChild(texto("p", null, a.retorno));
+          t.ret.appendChild(card);
+        }
+        var d = destino(k);
+        t.prox.disabled = d == null;
+        t.prox.textContent = d === "fim" ? "Ver resumo" : "Próxima pergunta";
+      }
+
+      // ---------- resumo ----------
+      var fim = el("div", "ram-fim");
+      fim.hidden = true;
+      var fimTit = texto("h3", "ram-fim-tit", "Resumo das suas respostas");
+      fimTit.tabIndex = -1;
+      fim.appendChild(fimTit);
+      var lista = el("ol", "ram-resumo");
+      fim.appendChild(lista);
+      var fimNota = texto("p", "nota", "Confira as respostas. Ao registrar, elas são enviadas à plataforma e não podem mais ser alteradas. O questionário não tem nota.");
+      fim.appendChild(fimNota);
+      var fimAcoes = el("div", "acoes");
+      var reg = botao("btn-act", "Registrar respostas");
+      var rev = botao("btn-act sec", "Revisar desde a pergunta 1");
+      fimAcoes.appendChild(reg);
+      fimAcoes.appendChild(rev);
+      fim.appendChild(fimAcoes);
+      var status = el("div", "refl-status");
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      status.tabIndex = -1;
+      fim.appendChild(status);
+      box.appendChild(fim);
+
+      function desenharFim() {
+        lista.innerHTML = "";
+        caminho().forEach(function (k) {
+          var li = el("li");
+          li.setAttribute("value", k + 1);
+          li.appendChild(el("span", "ram-resumo-p", P[k].enunciado || ""));
+          var a = alt(k);
+          var resp = el("strong", "ram-resumo-r", a ? (a.texto || "") : "");
+          if (!a) resp.textContent = "Não respondida";
+          li.appendChild(resp);
+          lista.appendChild(li);
+        });
+        reg.hidden = ctx.e;
+        rev.hidden = ctx.e;
+        fimNota.hidden = ctx.e;
+        reg.disabled = !completo();
+        if (ctx.e) {
+          status.innerHTML = "";
+          status.appendChild(texto("p", "enviada", "✓ Respostas registradas. Obrigado."));
+        }
+      }
+
+      reg.addEventListener("click", function () {
+        if (ctx.e || !completo()) return;
+        var ok = true;
+        caminho().forEach(function (k) {
+          var g = false;
+          try { g = window.Scorm.gravarResposta(b.id + "-P" + (k + 1), "Pergunta " + (k + 1) + ": " + textoPuro(alt(k).texto)); } catch (er) { g = false; }
+          ok = g && ok;
+        });
+        if (!ok) {
+          status.innerHTML = "";
+          status.appendChild(texto("div", "resultado parcial", "Não foi possível registrar agora. Suas respostas continuam na tela: tente novamente."));
+          return;
+        }
+        ctx.e = true;
+        P.forEach(function (p, k) { atualizarPergunta(k); });
+        desenharFim();
+        status.focus();
+        ctx.mudou();
+      });
+      rev.addEventListener("click", function () { ctx.hist = []; mostrar(0, true); });
+
+      function mostrar(v, focar) {
+        ctx.vista = v;
+        telas.forEach(function (t, k) {
+          t.sec.hidden = (k !== v);
+          t.volta.hidden = ctx.hist.length === 0;
+        });
+        fim.hidden = (v !== "fim");
+        if (v === "fim") {
+          desenharFim();
+          if (focar) fimTit.focus();
+        } else if (telas[v]) {
+          atualizarPergunta(v);
+          if (focar) telas[v].perg.focus();
+        }
+      }
+      ctx.mostrar = mostrar;
+      ctx.atualizarPergunta = atualizarPergunta;
+
+      if (!N) return box;
+      mostrar(0, false);
+      return box;
+    },
+    pendentes: function (b, ctx) { return (!ctx.e && (b.perguntas || []).length) ? 1 : 0; },
+    estado: function (b, ctx) {
+      if (!ctx.r || !ctx.r.some(function (v) { return v >= 0; })) return undefined;
+      var o = { r: ctx.r.slice() };
+      if (ctx.e) o.e = 1;
+      return o;
+    },
+    restaurar: function (b, ctx, valor) {
+      var P = b.perguntas || [];
+      if (!valor || !valor.r || valor.r.length !== P.length) return;
+      for (var k = 0; k < P.length; k++) {
+        var v = valor.r[k];
+        if (typeof v !== "number" || v < -1 || v >= (P[k].alternativas || []).length || v !== Math.floor(v)) return;
+      }
+      ctx.r = valor.r.slice();
+      var c = ctx.caminho();
+      if (valor.e === 1) {
+        var ultimo = c[c.length - 1];
+        var a = ultimo != null && ctx.r[ultimo] >= 0 ? P[ultimo].alternativas[ctx.r[ultimo]] : null;
+        // Só aceita "registrado" com o caminho completo
+        ctx.e = !!a;
+      }
+      P.forEach(function (p, k) { ctx.atualizarPergunta(k); });
+      // Volta para a primeira pergunta sem resposta do caminho, ou para o resumo
+      var pend = -1;
+      for (var i = 0; i < c.length; i++) if (ctx.r[c[i]] < 0) { pend = i; break; }
+      if (ctx.e || pend < 0) {
+        ctx.hist = c.slice();
+        ctx.mostrar("fim", false);
+      } else {
+        ctx.hist = c.slice(0, pend);
+        ctx.mostrar(c[pend], false);
+      }
     }
   });
 

@@ -276,3 +276,27 @@ describe("compilar: categorizar", () => {
     expect(c).toMatchObject({ categorias: ["Pais & mães", "<Autoridades>"], itens: [{ categoria: 0, fb: SUJO }, { categoria: 1 }] });
   });
 });
+
+describe("compilar: ramificado", () => {
+  it("mantém ids e destinos; ida e volta pelo importador é idempotente", () => {
+    const p = novoProjeto({ curso: "CTGESTAO", ud: 11, atividade: "QUIZ", numero: 1, titulo: "T", contexto: "C" });
+    const s = novoSlide("conteudo");
+    s.titulo = "Tela";
+    const r = novoBloco("ramificado");
+    r.perguntas[0].enunciado = "Tem <strong>CNPJ</strong>?";
+    r.perguntas[0].alternativas[0] = { texto: "Sim", retorno: 'A & B <c>', proxima: "fim", extras: { x: 1 } };
+    r.perguntas[1].extras = { y: 2 };
+    s.blocos = [r];
+    p.slides.splice(1, 0, s);
+    const [c] = (compilarConteudo(p).slides[1] as { blocos: Array<Record<string, unknown>> }).blocos;
+    expect(Object.keys(c)).toEqual(["id", "tipo", "perguntas"]);
+    const ps = c.perguntas as Array<Record<string, unknown>>;
+    expect(Object.keys(ps[1])).toEqual(["id", "enunciado", "alternativas"]);
+    expect((ps[0].alternativas as unknown[])[0]).toEqual({ texto: "Sim", retorno: "A & B <c>", proxima: "fim" });
+    expect((ps[0].alternativas as Array<{ proxima: string }>)[1].proxima).toBe(r.perguntas[1].id);
+    const js1 = compilarDataJs(p);
+    const { projeto: p2, avisos } = importarDataJs(js1);
+    expect(avisos).toEqual([]);
+    expect(compilarDataJs(p2)).toBe(js1);
+  });
+});
