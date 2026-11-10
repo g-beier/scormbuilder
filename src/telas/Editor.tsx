@@ -1,5 +1,9 @@
-/** Editor em três colunas: telas · formulário da tela · prévia. */
-import { useEffect, useMemo, useState } from "react";
+/**
+ * Editor em duas colunas: à esquerda, a faixa de telas (em cima) e a prévia (embaixo);
+ * à direita, o formulário da tela, com largura ajustável pelo separador.
+ * A faixa e a prévia podem ser recolhidas; a escolha e a largura ficam guardadas.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Problema, Projeto } from "../modelo/tipos";
 import { validar } from "../modelo/validar";
 import { nomePacote } from "../modelo/compilar";
@@ -17,15 +21,39 @@ import { pedirFoco } from "../editor/foco";
 import { tratarAtalhoDesfazer, tratarEsc } from "../editor/atalhos";
 import { PainelPrevia } from "../previa/PainelPrevia";
 import { DialogoExportar } from "../editor/DialogoExportar";
+import { LARGURA_PADRAO, Separador, limitarLargura } from "../editor/Separador";
 
 const CHAVE_PREVIA = "scorm-builder:previa-recolhida";
+const CHAVE_FAIXA = "scorm-builder:faixa-recolhida";
+const CHAVE_LARGURA = "scorm-builder:largura-edicao";
+/** Abaixo desta largura de janela, a prévia começa recolhida. */
+const JANELA_ESTREITA = 960;
 
-function lerPreferencia(): boolean {
+function ler(chave: string): string | null {
   try {
-    return localStorage.getItem(CHAVE_PREVIA) === "1";
+    return localStorage.getItem(chave);
   } catch {
-    return false;
+    return null;
   }
+}
+
+function gravar(chave: string, valor: string) {
+  try {
+    localStorage.setItem(chave, valor);
+  } catch {
+    /* sem armazenamento: só não lembra */
+  }
+}
+
+function previaInicial(): boolean {
+  const v = ler(CHAVE_PREVIA);
+  if (v !== null) return v === "1";
+  return window.innerWidth < JANELA_ESTREITA;
+}
+
+function larguraInicial(): number {
+  const n = Number(ler(CHAVE_LARGURA));
+  return Number.isFinite(n) && n > 0 ? n : LARGURA_PADRAO;
 }
 
 export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): void }) {
@@ -34,7 +62,11 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
   const { selecionarSlide, selecionarBloco, atualizarMeta } = useProjeto.getState();
   const [dadosAbertos, setDadosAbertos] = useState(false);
   const [exportarAberto, setExportarAberto] = useState(false);
-  const [previaRecolhida, setPreviaRecolhida] = useState(lerPreferencia);
+  const [previaRecolhida, setPreviaRecolhida] = useState(previaInicial);
+  const [faixaRecolhida, setFaixaRecolhida] = useState(() => ler(CHAVE_FAIXA) === "1");
+  const [largura, setLargura] = useState(larguraInicial);
+  const colunasRef = useRef<HTMLDivElement>(null);
+  const conteiner = useCallback(() => colunasRef.current, []);
   const problemas = useMemo(() => validar(projeto), [projeto]);
 
   // Seleção some (ex. desfazer apagou a tela): volta para uma tela que existe.
@@ -62,13 +94,38 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
     return () => window.removeEventListener("keydown", teclas);
   }, []);
 
+  // A largura guardada é a preferência; a efetiva respeita os mínimos da janela atual
+  // (janela menor não muda a preferência, então ela volta ao aumentar a janela).
+  const [larguraTotal, setLarguraTotal] = useState(0);
+  useEffect(() => {
+    const el = colunasRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setLarguraTotal(el.getBoundingClientRect().width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const larguraEfetiva = limitarLargura(largura, larguraTotal);
+
+  function mudarLargura(pct: number) {
+    setLargura(pct);
+    gravar(CHAVE_LARGURA, String(pct));
+  }
+
   function alternarPrevia() {
-    setPreviaRecolhida((v) => {
-      try {
-        localStorage.setItem(CHAVE_PREVIA, v ? "0" : "1");
-      } catch {
-        /* sem armazenamento: só não lembra */
-      }
+    const nova = !previaRecolhida;
+    setPreviaRecolhida(nova);
+    gravar(CHAVE_PREVIA, nova ? "1" : "0");
+    // O botão clicado some: o foco vai para o botão equivalente do outro lugar
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(nova ? ".faixa-previa" : ".previa-esconder")
+        ?.focus(),
+    );
+  }
+
+  function alternarFaixa() {
+    setFaixaRecolhida((v) => {
+      gravar(CHAVE_FAIXA, v ? "0" : "1");
       return !v;
     });
   }
@@ -79,8 +136,11 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
       return;
     }
     if (!p.slideId) {
-      // Ex.: "Falta a tela de fim": leva aos botões de nova tela.
-      document.querySelector<HTMLElement>(".slides-acoes button:last-child")?.focus();
+      // Ex.: "Falta a tela de fim": leva aos botões de nova tela (abre a faixa se preciso).
+      if (faixaRecolhida) alternarFaixa();
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>('.slides-acoes [data-nova="fim"], .slides-acoes [data-nova="capa"], .slides-acoes button')?.focus(),
+      );
       return;
     }
     if (p.blocoId) selecionarBloco(p.slideId, p.blocoId);
@@ -110,8 +170,29 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
         aoExportar={() => setExportarAberto(true)}
         aoInicio={aoInicio}
       />
-      <div className={`editor-colunas${previaRecolhida ? " previa-recolhida" : ""}`}>
-        <ListaSlides slides={projeto.slides} problemas={problemas} />
+      <div
+        ref={colunasRef}
+        className={`editor-colunas${previaRecolhida ? " previa-recolhida" : ""}`}
+        style={{ ["--larg-edicao" as string]: `${larguraEfetiva}%` }}
+      >
+        <ListaSlides
+          slides={projeto.slides}
+          problemas={problemas}
+          recolhida={faixaRecolhida}
+          aoAlternar={alternarFaixa}
+          previaRecolhida={previaRecolhida}
+          aoAlternarPrevia={alternarPrevia}
+        />
+        {!previaRecolhida && (
+          <PainelPrevia
+            projeto={projeto}
+            slideSelecionadoId={slideSelecionadoId}
+            selecaoN={selecaoN}
+            recolhido={false}
+            aoAlternar={alternarPrevia}
+          />
+        )}
+        {!previaRecolhida && <Separador valor={larguraEfetiva} aoMudar={mudarLargura} conteiner={conteiner} />}
         <main className="coluna-form" aria-label="Edição da tela">
           {slide ? (
             <FormSlide
@@ -121,16 +202,9 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
               problemas={problemas.filter((p) => p.slideId === slide.id)}
             />
           ) : (
-            <p className="vazio">Nenhuma tela. Use “Nova tela” à esquerda.</p>
+            <p className="vazio">Nenhuma tela. Use “Nova tela” na faixa de telas.</p>
           )}
         </main>
-        <PainelPrevia
-          projeto={projeto}
-          slideSelecionadoId={slideSelecionadoId}
-          selecaoN={selecaoN}
-          recolhido={previaRecolhida}
-          aoAlternar={alternarPrevia}
-        />
       </div>
       <Dialogo
         aberto={dadosAbertos}

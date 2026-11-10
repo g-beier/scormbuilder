@@ -17,6 +17,8 @@ const PATHS: Record<string, string> = {
   recolher: "m15 18-6-6 6-6",
   expandir: "m9 18 6-6-6-6",
   seta: "m6 9 6 6 6-6",
+  "seta-cima": "m6 15 6-6 6 6",
+  previa: "M3 4h18v12H3zM8 20h8M12 16v4",
   pasta: "M3 6h6l2 2h10v11H3z",
   arquivo: "M6 3h8l4 4v14H6zM14 3v4h4",
   salvar: "M5 3h11l3 3v15H5zM8 3v5h7M8 21v-7h8v7",

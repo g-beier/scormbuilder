@@ -218,18 +218,18 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
   return (
     <aside className={`painel-previa${recolhido ? " recolhido" : ""}`} aria-label="Prévia">
       <div className="previa-cabecalho">
+        <h2 className="coluna-titulo">Prévia</h2>
         <button
           type="button"
-          className="btn-icone"
+          className="btn-icone previa-esconder"
           aria-expanded={!recolhido}
           aria-controls={id}
           aria-label={recolhido ? "Mostrar prévia" : "Esconder prévia"}
-          title={recolhido ? "Mostrar prévia" : "Esconder prévia"}
+          title={recolhido ? "Mostrar prévia" : "Esconder prévia (a edição ocupa a largura toda)"}
           onClick={aoAlternar}
         >
-          <Icone nome={recolhido ? "recolher" : "expandir"} />
+          <Icone nome="fechar" />
         </button>
-        {!recolhido && <h2 className="coluna-titulo">Prévia</h2>}
       </div>
       <div id={id} className="previa-corpo" hidden={recolhido} ref={corpoRef}>
         <div
