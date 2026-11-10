@@ -10,6 +10,7 @@ import type {
   Slide,
   SlideV2,
 } from "./tipos";
+import { escaparHtml as esc } from "./texto";
 
 /** Maiúsculas, sem acentos, só A-Z e 0-9. */
 export function normalizarSigla(texto: string): string {
@@ -39,13 +40,19 @@ function temLista(v: string[] | undefined): v is string[] {
 
 function compilarCard(c: Card): Card {
   const out: Card = { cor: c.cor };
-  if (temTexto(c.titulo)) out.titulo = c.titulo;
+  if (temTexto(c.titulo)) out.titulo = esc(c.titulo);
   if (temTexto(c.breve)) out.breve = c.breve;
   if (temLista(c.paras)) out.paras = [...c.paras];
   if (temLista(c.lista)) out.lista = [...c.lista];
   return out;
 }
 
+/*
+ * Escape de texto simples: kicker, títulos de tela/cartão/linha/contraste, nome do
+ * ordenar, botão e título do confira vão por innerHTML no motor e são escapados.
+ * `explica` (textContent) e `contexto` (textContent) ficam como estão; campos ricos
+ * já são HTML. Ver ./texto.ts e o inverso em importar.ts.
+ */
 export function compilarBloco(b: Bloco): BlocoV2 {
   switch (b.tipo) {
     case "texto":
@@ -62,12 +69,12 @@ export function compilarBloco(b: Bloco): BlocoV2 {
       return out;
     }
     case "ordenar": {
-      const out: Omit<BlocoOrdenar, "extras"> = { id: b.id, tipo: b.tipo, nome: b.nome, passos: [...b.passos], porque: b.porque };
+      const out: Omit<BlocoOrdenar, "extras"> = { id: b.id, tipo: b.tipo, nome: esc(b.nome), passos: [...b.passos], porque: b.porque };
       if (temTexto(b.nota)) out.nota = b.nota;
       return out;
     }
     case "linha":
-      return { id: b.id, tipo: b.tipo, itens: b.itens.map((i) => ({ titulo: i.titulo, texto: i.texto })) };
+      return { id: b.id, tipo: b.tipo, itens: b.itens.map((i) => ({ titulo: esc(i.titulo), texto: i.texto })) };
     case "quiz":
       return {
         id: b.id,
@@ -83,12 +90,12 @@ export function compilarBloco(b: Bloco): BlocoV2 {
       return {
         id: b.id,
         tipo: b.tipo,
-        itens: b.itens.map((i) => ({ cor: i.cor, titulo: i.titulo, texto: i.texto })),
+        itens: b.itens.map((i) => ({ cor: i.cor, titulo: esc(i.titulo), texto: i.texto })),
       };
     case "destaque":
       return { id: b.id, tipo: b.tipo, html: b.html };
     case "confira":
-      return { id: b.id, tipo: b.tipo, botao: b.botao, titulo: b.titulo, paras: [...b.paras] };
+      return { id: b.id, tipo: b.tipo, botao: esc(b.botao), titulo: esc(b.titulo), paras: [...b.paras] };
     case "fonte":
       return { id: b.id, tipo: b.tipo, html: b.html };
   }
@@ -97,11 +104,11 @@ export function compilarBloco(b: Bloco): BlocoV2 {
 export function compilarSlide(s: Slide): SlideV2 {
   switch (s.tipo) {
     case "capa":
-      return { id: s.id, tipo: s.tipo, kicker: s.kicker, titulo: s.titulo, sub: s.sub };
+      return { id: s.id, tipo: s.tipo, kicker: esc(s.kicker), titulo: esc(s.titulo), sub: s.sub };
     case "conteudo":
-      return { id: s.id, tipo: s.tipo, kicker: s.kicker, titulo: s.titulo, blocos: s.blocos.map(compilarBloco) };
+      return { id: s.id, tipo: s.tipo, kicker: esc(s.kicker), titulo: esc(s.titulo), blocos: s.blocos.map(compilarBloco) };
     case "fim":
-      return { id: s.id, tipo: s.tipo, titulo: s.titulo, texto: s.texto };
+      return { id: s.id, tipo: s.tipo, titulo: esc(s.titulo), texto: s.texto };
   }
 }
 
