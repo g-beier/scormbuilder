@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Aplicativo desktop (Tauri 2 + React 19 + TypeScript + Vite) para **construir pacotes SCORM 1.2** de forma amigável, para o Moodle do Campo Escola Virtual (CEV) dos Escoteiros do Brasil. O usuário escolhe tipos de slide (capa, cards, quiz, arrastar para ordenar, linha do tempo, "Confira", fim etc.), preenche formulários e o app gera o `js/data.js`, o `imsmanifest.xml` e o `.zip` pronto para o Moodle.
 
-É um **builder**: cria SCORMs novos a partir de um projeto próprio, com um runtime próprio. O `~/Dev/ead-scorm` é fonte de conhecimento e de importação, não modelo a copiar. Plano de módulos (M0–M6): `~/.claude/plans/vamos-planejar-o-desenvolvimento-enumerated-trinket.md`. Idioma da interface e dos textos: português do Brasil.
+É um **builder**: cria SCORMs novos a partir de um projeto próprio, com um runtime próprio. O `~/Dev/ead-scorm` é fonte de conhecimento e de importação, não modelo a copiar. Plano de módulos (M0–M7): `~/.claude/plans/vamos-planejar-o-desenvolvimento-enumerated-trinket.md`. Idioma da interface e dos textos: português do Brasil.
 
 ## Comandos
 
