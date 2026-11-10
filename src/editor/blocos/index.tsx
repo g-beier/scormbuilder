@@ -13,6 +13,7 @@ import { FormConfira } from "./FormConfira";
 import { FormMultipla } from "./FormMultipla";
 import { FormReflexao } from "./FormReflexao";
 import { FormEscolha } from "./FormEscolha";
+import { FormCategorizar } from "./FormCategorizar";
 
 /** Form de cada tipo de bloco. */
 export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extract<Bloco, { tipo: T }>>> } = {
@@ -29,6 +30,7 @@ export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extra
   multipla: FormMultipla,
   reflexao: FormReflexao,
   escolha: FormEscolha,
+  categorizar: FormCategorizar,
 };
 
 /** Descrição curta de cada tipo, para o menu "Adicionar bloco". */
@@ -46,4 +48,5 @@ export const DESCRICOES_BLOCO: Record<TipoBloco, string> = {
   multipla: "Pergunta com uma ou mais alternativas certas, cada uma comentada.",
   reflexao: "O aluno escreve uma resposta livre, sem nota.",
   escolha: "Sem certo ou errado: cada alternativa mostra um retorno.",
+  categorizar: "O aluno leva cada item para a categoria certa e verifica.",
 };

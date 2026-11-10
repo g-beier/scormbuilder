@@ -90,6 +90,30 @@ describe("importar v2: tipos do M6", () => {
   });
 });
 
+describe("importar v2: categorizar", () => {
+  it("desescapa categorias; categoria inválida vira -1 e vai para extras", () => {
+    const fonte = `window.CONTEUDO = { formato: 2, id: "X_UD1_Y1", contexto: "c", titulo: "T", slides: [
+      { id: "s-1", tipo: "conteudo", titulo: "Tela", blocos: [
+        { id: "b-c", tipo: "categorizar", enunciado: "E", categorias: ["A &amp; B", "C"],
+          itens: [ { texto: "i1", categoria: 1, fb: "f" }, { texto: "i2", categoria: "a" } ], msgRevisar: "R" } ] },
+      { id: "s-fim", tipo: "fim", titulo: "Fim", texto: "t" } ] };`;
+    const { projeto, avisos } = importarDataJs(fonte);
+    const [c] = (projeto.slides[0] as SlideConteudo).blocos;
+    expect(c).toEqual({
+      id: "b-c",
+      tipo: "categorizar",
+      enunciado: "E",
+      categorias: ["A & B", "C"],
+      itens: [
+        { texto: "i1", categoria: 1, fb: "f" },
+        { texto: "i2", categoria: -1, fb: "", extras: { categoria: "a" } },
+      ],
+      msgRevisar: "R",
+    });
+    expect(avisos.filter((a) => /formato inesperado/.test(a))).toHaveLength(1);
+  });
+});
+
 // ---------- Teste de ouro com os pacotes reais do ead-scorm ----------
 
 const RAIZ = join(homedir(), "Dev", "ead-scorm");

@@ -10,6 +10,7 @@ import { FORMS_BLOCO } from "./index";
 import { FormMultipla } from "./FormMultipla";
 import { FormReflexao } from "./FormReflexao";
 import { FormEscolha } from "./FormEscolha";
+import { FormCategorizar } from "./FormCategorizar";
 
 afterEach(cleanup);
 
@@ -36,6 +37,7 @@ describe("forms dos tipos do M6", () => {
     expect(FORMS_BLOCO.multipla).toBe(FormMultipla);
     expect(FORMS_BLOCO.reflexao).toBe(FormReflexao);
     expect(FORMS_BLOCO.escolha).toBe(FormEscolha);
+    expect(FORMS_BLOCO.categorizar).toBe(FormCategorizar);
   });
 
   it("reflexão: obrigatória liga opcional=false e desliga removendo o campo", async () => {
@@ -96,5 +98,42 @@ describe("forms dos tipos do M6", () => {
     fireEvent.change(retornos[1], { target: { value: "Releia a seção 2." } });
     expect(ref.atual.opcoes[1].retorno).toBe("Releia a seção 2.");
     expect((screen.getByRole("button", { name: "Remover alternativa 2" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("categorizar: escolhe categoria; mover e remover categorias acompanham os itens", async () => {
+    const ref = montar(FormCategorizar, novoBloco("categorizar"));
+    await act(async () => {});
+    const nomes = screen.getAllByLabelText("Nome da categoria");
+    fireEvent.change(nomes[0], { target: { value: "Adulto" } });
+    fireEvent.change(nomes[1], { target: { value: "Autoridades" } });
+    const sel = () => screen.getAllByLabelText("Categoria certa") as HTMLSelectElement[];
+    expect(sel()[0].value).toBe("");
+    expect([...sel()[0].options].map((o) => o.textContent)).toEqual(["Escolha a categoria…", "Adulto", "Autoridades"]);
+    fireEvent.change(sel()[0], { target: { value: "0" } });
+    fireEvent.change(sel()[1], { target: { value: "1" } });
+    expect(ref.atual.itens.map((i) => i.categoria)).toEqual([0, 1]);
+    // terceira categoria, ainda sem nome, aparece como "Categoria 3"
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar categoria/ }));
+    expect([...sel()[0].options].map((o) => o.textContent)).toEqual(["Adulto", "Autoridades", "Categoria 3"]);
+    fireEvent.change(sel()[1], { target: { value: "2" } });
+    // mover a categoria 1 para baixo: itens trocam de índice junto
+    fireEvent.click(screen.getByRole("button", { name: "Mover categoria 1 para baixo" }));
+    expect(ref.atual.categorias).toEqual(["Autoridades", "Adulto", ""]);
+    expect(ref.atual.itens.map((i) => i.categoria)).toEqual([1, 2]);
+    // remover "Adulto": o item 1 fica sem categoria e o item 2 desce de índice
+    fireEvent.click(screen.getByRole("button", { name: "Remover categoria 2" }));
+    expect(ref.atual.categorias).toEqual(["Autoridades", ""]);
+    expect(ref.atual.itens.map((i) => i.categoria)).toEqual([-1, 1]);
+    expect(sel()[0].value).toBe("");
+    expect((screen.getByRole("button", { name: "Remover categoria 1" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("categorizar: no máximo 4 categorias", async () => {
+    montar(FormCategorizar, novoBloco("categorizar"));
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar categoria/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar categoria/ }));
+    expect(screen.queryByRole("button", { name: /Adicionar categoria/ })).toBeNull();
+    expect(screen.getByText("Máximo de 4.")).toBeTruthy();
   });
 });

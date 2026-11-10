@@ -78,6 +78,16 @@ export interface OpcaoEscolha {
   extras?: Extras;
 }
 
+export interface ItemCategorizar {
+  /** HTML (texto rico inline). */
+  texto: string;
+  /** Índice da categoria certa em `categorias`; -1 = ainda não escolhida no editor. */
+  categoria: number;
+  /** Comentário deste item (texto simples), mostrado ao verificar. Pode ficar vazio. */
+  fb: string;
+  extras?: Extras;
+}
+
 // ---------- Blocos ----------
 
 interface BlocoBase {
@@ -175,6 +185,22 @@ export interface BlocoEscolha extends BlocoBase {
   opcoes: OpcaoEscolha[];
 }
 
+/** Limites de categorias do bloco "categorizar" (o runtime tem 4 cores). */
+export const LIMITES_CATEGORIZAR = { minCategorias: 2, maxCategorias: 4, minItens: 2, itensAviso: 10 } as const;
+
+/** Classificar: o aluno coloca cada item numa categoria e clica "Verificar". */
+export interface BlocoCategorizar extends BlocoBase {
+  tipo: "categorizar";
+  enunciado: string;
+  /** Títulos das categorias (texto simples). */
+  categorias: string[];
+  itens: ItemCategorizar[];
+  /** Texto simples; vazio = mensagem padrão do motor. */
+  msgAcerto?: string;
+  /** Texto simples; vazio = mensagem padrão do motor. */
+  msgRevisar?: string;
+}
+
 export type Bloco =
   | BlocoTexto
   | BlocoLista
@@ -188,7 +214,8 @@ export type Bloco =
   | BlocoFonte
   | BlocoMultipla
   | BlocoReflexao
-  | BlocoEscolha;
+  | BlocoEscolha
+  | BlocoCategorizar;
 
 export type TipoBloco = Bloco["tipo"];
 export const TIPOS_BLOCO: readonly TipoBloco[] = [
@@ -205,6 +232,7 @@ export const TIPOS_BLOCO: readonly TipoBloco[] = [
   "multipla",
   "reflexao",
   "escolha",
+  "categorizar",
 ];
 
 // ---------- Slides ----------
@@ -294,6 +322,7 @@ export const NOMES_BLOCO: Record<TipoBloco, string> = {
   multipla: "Múltipla escolha",
   reflexao: "Reflexão",
   escolha: "Escolha com retorno",
+  categorizar: "Classificar em categorias",
 };
 
 export const NOMES_SLIDE: Record<TipoSlide, string> = {

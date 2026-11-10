@@ -156,6 +156,8 @@ export interface PropsListaEditavel<T> {
   textoAdicionar: string;
   /** Não deixa remover abaixo deste número. */
   minimo?: number;
+  /** Esconde o "Adicionar" ao chegar neste número. */
+  maximo?: number;
   /** Chave data-foco da lista (o painel de problemas foca aqui se a lista estiver vazia). */
   foco?: string;
   /** Itens com cartão próprio (cards, perguntas) em vez de linha compacta. */
@@ -173,6 +175,7 @@ export function ListaEditavel<T>({
   aoMover,
   textoAdicionar,
   minimo = 0,
+  maximo,
   foco,
   emCaixa,
 }: PropsListaEditavel<T>) {
@@ -263,9 +266,13 @@ export function ListaEditavel<T>({
           </li>
         ))}
       </ol>
-      <button type="button" className="btn btn-pequeno btn-adicionar" onClick={adicionarEFocar}>
-        <Icone nome="mais" /> {textoAdicionar}
-      </button>
+      {maximo === undefined || itens.length < maximo ? (
+        <button type="button" className="btn btn-pequeno btn-adicionar" onClick={adicionarEFocar}>
+          <Icone nome="mais" /> {textoAdicionar}
+        </button>
+      ) : (
+        <p className="ajuda">Máximo de {maximo}.</p>
+      )}
     </fieldset>
   );
 }

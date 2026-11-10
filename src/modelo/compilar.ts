@@ -1,6 +1,7 @@
 import type {
   Bloco,
   BlocoCards,
+  BlocoCategorizar,
   BlocoMultipla,
   BlocoOrdenar,
   BlocoReflexao,
@@ -63,7 +64,9 @@ function compilarCard(c: Card): Card {
  * já são HTML. Ver ./texto.ts e o inverso em importar.ts.
  * Nos tipos do M6 (multipla, reflexao, escolha), os campos simples (`fb`,
  * `retorno`, `aviso`, `msgAcerto`, `msgRevisar`) vão por textContent no motor
- * e não são escapados.
+ * e não são escapados. No categorizar, os títulos das categorias são texto
+ * simples inserido via innerHTML (escapados); `itens[].fb`, `msgAcerto` e
+ * `msgRevisar` vão por textContent.
  */
 export function compilarBloco(b: Bloco): BlocoV2 {
   switch (b.tipo) {
@@ -136,6 +139,18 @@ export function compilarBloco(b: Bloco): BlocoV2 {
         pergunta: b.pergunta,
         opcoes: b.opcoes.map((o) => ({ texto: o.texto, retorno: o.retorno })),
       };
+    case "categorizar": {
+      const out: Omit<BlocoCategorizar, "extras"> = {
+        id: b.id,
+        tipo: b.tipo,
+        enunciado: b.enunciado,
+        categorias: b.categorias.map((c) => esc(c)),
+        itens: b.itens.map((it) => ({ texto: it.texto, categoria: it.categoria, fb: it.fb })),
+      };
+      if (temTexto(b.msgAcerto)) out.msgAcerto = b.msgAcerto;
+      if (temTexto(b.msgRevisar)) out.msgRevisar = b.msgRevisar;
+      return out;
+    }
   }
 }
 

@@ -426,7 +426,7 @@ var Motor = (function () {
 
     var tx = null;
     stage.addEventListener("touchstart", function (e) {
-      tx = e.target.closest && e.target.closest(".drag-list, textarea") ? null : e.changedTouches[0].clientX;
+      tx = e.target.closest && e.target.closest(".drag-list, .cat-item, textarea") ? null : e.changedTouches[0].clientX;
     }, { passive: true });
     stage.addEventListener("touchend", function (e) {
       if (tx === null) return;
@@ -1101,6 +1101,292 @@ var Motor = (function () {
       if (typeof valor !== "number" || !ctx.ui.ops[valor]) return;
       ctx.escolha = valor;
       aplicarEscolha(b, ctx.ui, valor);
+    }
+  });
+
+  // =====================================================================
+  // Classificar em categorias (M6). Novo, sem equivalente no kit.
+  // Três formas de mover um item: arrastar com o ponteiro; tocar no item e depois na
+  // categoria; ou Tab até o item, Enter/Espaço, Tab até a categoria e Enter.
+  // Estado = categoria de cada item (na ordem do data.js) na última verificação.
+  // =====================================================================
+
+  // Coloca cada item no seu recipiente (bandeja = -1), na ordem do data.js
+  function distribuirCat(ui, pos) {
+    pos.forEach(function (c, i) {
+      var alvo = c >= 0 && ui.zonas[c] ? ui.zonas[c].lista : ui.bandeja;
+      alvo.appendChild(ui.itens[i].li);
+    });
+    ui.bandejaBox.classList.toggle("vazia", pos.every(function (c) { return c >= 0; }));
+  }
+
+  function limparMarcasCat(ui) {
+    ui.itens.forEach(function (it) {
+      it.bt.classList.remove("ok", "erro");
+      it.bt.disabled = false;
+      it.bt.removeAttribute("aria-describedby");
+      it.fb.hidden = true;
+      it.fb.textContent = "";
+    });
+    ui.bandejaBox.hidden = false;
+  }
+
+  function aplicarCategorizar(b, ui, pos) {
+    var certos = 0;
+    distribuirCat(ui, pos);
+    ui.itens.forEach(function (it, i) {
+      var o = (b.itens || [])[i] || {};
+      var fbTxt = o.fb == null ? "" : String(o.fb);
+      var ok = pos[i] === o.categoria;
+      it.bt.disabled = true;
+      it.bt.setAttribute("aria-pressed", "false");
+      it.bt.classList.remove("ok", "erro", "sel");
+      it.bt.classList.add(ok ? "ok" : "erro");
+      it.fb.textContent = ok ? fbTxt : ("Não é desta categoria. " + fbTxt).replace(/ $/, "");
+      it.fb.hidden = !it.fb.textContent;
+      if (!it.fb.hidden) it.bt.setAttribute("aria-describedby", it.fb.id);
+      if (ok) certos++;
+    });
+    ui.zonas.forEach(function (z) { z.alvo.disabled = true; });
+    ui.bandejaBox.hidden = true;   // tudo colocado e travado: a dica de "trocar de lugar" não vale
+    ui.res.innerHTML = "";
+    var n = ui.itens.length;
+    ui.res.appendChild(certos === n
+      ? texto("div", "resultado bom", b.msgAcerto || "Muito bem: todos os itens estão na categoria certa.")
+      : texto("div", "resultado parcial", (b.msgRevisar || "Alguns itens merecem revisão. Veja os comentários marcados em vermelho.") +
+          " (" + certos + " de " + n + " no lugar certo.)"));
+    ui.ver.hidden = true;
+    ui.ref.hidden = false;
+  }
+
+  bloco("categorizar", {
+    aviso: "Classifique os itens e verifique para avançar.",
+    falta: ["atividade de classificar ainda não verificada", "atividades de classificar ainda não verificadas"],
+    ordemAviso: 6,
+    ordemFalta: 6,
+    render: function (b, ctx) {
+      var cats = b.categorias || [];
+      var itensB = b.itens || [];
+      ctx.resp = null;     // categorias na última verificação (null = nunca verificou)
+      ctx.pos = itensB.map(function () { return -1; });
+      ctx.sel = null;
+
+      var cx = caixaPergunta(ctx, "categorizar", b.enunciado);
+      cx.box.appendChild(texto("p", "flow-help",
+        "Arraste cada item para a categoria certa. Também dá para tocar no item e depois na categoria (no teclado: Tab, Enter no item, Tab até a categoria e Enter)."));
+
+      var status = el("p", "sr-only");
+      status.setAttribute("aria-live", "polite");
+
+      var bandejaBox = el("div", "cat-bandeja");
+      var bandejaRot = texto("p", "cat-bandeja-rot", "Itens para classificar");
+      bandejaRot.id = cx.id + "-b";
+      bandejaBox.appendChild(bandejaRot);
+      var bandeja = el("ul", "cat-lista");
+      bandeja.setAttribute("aria-labelledby", bandejaRot.id);
+      bandejaBox.appendChild(bandeja);
+      var tudoFeito = texto("p", "cat-bandeja-ok", "Todos os itens já estão numa categoria. Para trocar um item de lugar, toque nele e depois na outra categoria.");
+      bandejaBox.appendChild(tudoFeito);
+      cx.box.appendChild(bandejaBox);
+
+      var grade = el("div", "cat-zonas" + (cats.length === 3 ? " tres" : ""));
+      var zonas = cats.map(function (titulo, c) {
+        var z = el("div", "cat-zona c-" + CORES[c % CORES.length]);
+        z.setAttribute("data-cat", c);
+        var alvo = el("button", "cat-alvo");
+        alvo.type = "button";
+        var tit = el("span", "cat-titulo", titulo || "");
+        tit.id = cx.id + "-c" + c;
+        alvo.appendChild(tit);
+        alvo.appendChild(texto("span", "cat-dica", "Colocar aqui o item selecionado"));
+        alvo.disabled = true;
+        z.appendChild(alvo);
+        var ul = el("ul", "cat-lista");
+        ul.setAttribute("aria-labelledby", tit.id);
+        z.appendChild(ul);
+        grade.appendChild(z);
+        return { el: z, alvo: alvo, lista: ul, titulo: tit };
+      });
+      cx.box.appendChild(grade);
+
+      var itens = itensB.map(function (o, i) {
+        var li = el("li", "cat-item-li");
+        var bt = el("button", "cat-item", o.texto || "");
+        bt.type = "button";
+        bt.setAttribute("aria-pressed", "false");
+        bt.setAttribute("data-item", i);
+        var fb = el("span", "fb");
+        fb.id = cx.id + "-f" + i;
+        fb.hidden = true;
+        li.appendChild(bt);
+        li.appendChild(fb);
+        return { li: li, bt: bt, fb: fb };
+      });
+
+      var res = el("div", "quiz-resultado");
+      res.setAttribute("aria-live", "polite");
+      cx.box.appendChild(res);
+      var acoes = el("div", "acoes");
+      var ver = botao("btn-act", "Verificar");
+      var ref = botao("btn-act sec", "Tentar de novo");
+      ref.hidden = true;
+      acoes.appendChild(ver);
+      acoes.appendChild(ref);
+      cx.box.appendChild(acoes);
+      cx.box.appendChild(status);
+
+      var ui = ctx.ui = { itens: itens, zonas: zonas, bandeja: bandeja, bandejaBox: bandejaBox, res: res, ver: ver, ref: ref };
+      distribuirCat(ui, ctx.pos);
+
+      function nomeItem(i) { return (itens[i].bt.textContent || "").trim(); }
+      function nomeCat(c) { return (zonas[c].titulo.textContent || "").trim(); }
+
+      function selecionar(i) {
+        ctx.sel = i;
+        itens.forEach(function (it, k) {
+          it.bt.classList.toggle("sel", k === i);
+          it.bt.setAttribute("aria-pressed", k === i ? "true" : "false");
+        });
+        zonas.forEach(function (z) { z.alvo.disabled = i == null; });
+        grade.classList.toggle("escolhendo", i != null);
+        if (i != null) status.textContent = "“" + nomeItem(i) + "” selecionado. Escolha a categoria.";
+      }
+
+      function mover(i, c) {
+        var foco = document.activeElement === itens[i].bt;
+        ctx.pos[i] = c;
+        res.innerHTML = "";
+        distribuirCat(ui, ctx.pos);
+        selecionar(null);
+        status.textContent = "“" + nomeItem(i) + "” colocado em “" + nomeCat(c) + "”.";
+        if (foco) itens[i].bt.focus();
+      }
+
+      var aposArrastar = false;
+      itens.forEach(function (it, i) {
+        it.bt.addEventListener("click", function () {
+          if (aposArrastar) { aposArrastar = false; return; }
+          selecionar(ctx.sel === i ? null : i);
+        });
+      });
+
+      zonas.forEach(function (z, c) {
+        z.alvo.addEventListener("click", function () {
+          if (ctx.sel == null) return;
+          var i = ctx.sel;
+          mover(i, c);
+          z.alvo.focus();
+        });
+      });
+
+      cx.box.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && ctx.sel != null) { selecionar(null); status.textContent = "Seleção cancelada."; }
+      });
+
+      // Arrastar com o ponteiro (mouse, toque, caneta). Perto da borda de cima ou de baixo
+      // da área de conteúdo, a tela rola sozinha (no celular as categorias ficam empilhadas).
+      var drag = null;
+      var palco = document.getElementById("stage");
+      function zonaEm(x, y, bt) {
+        bt.style.visibility = "hidden";
+        var alvo = document.elementFromPoint(x, y);
+        bt.style.visibility = "";
+        return alvo && alvo.closest ? alvo.closest(".cat-zona") : null;
+      }
+      function acompanhar() {
+        var d = drag;
+        d.bt.style.transform = "translate(" + (d.cx - d.x) + "px," + (d.cy - d.y + palco.scrollTop - d.top0) + "px)";
+        var z = zonaEm(d.cx, d.cy, d.bt);
+        zonas.forEach(function (zz) { zz.el.classList.toggle("sobre", zz.el === z); });
+      }
+      function rolarSozinho() {
+        if (!drag || !drag.ativo) return;
+        var r = palco.getBoundingClientRect(), borda = 48, v = 0;
+        if (drag.cy > r.bottom - borda) v = Math.min(16, (drag.cy - (r.bottom - borda)) / 3 + 2);
+        else if (drag.cy < r.top + borda) v = -Math.min(16, ((r.top + borda) - drag.cy) / 3 + 2);
+        if (v) {
+          var antes = palco.scrollTop;
+          palco.scrollTop = antes + v;
+          if (palco.scrollTop !== antes) acompanhar();
+        }
+        drag.raf = window.requestAnimationFrame(rolarSozinho);
+      }
+      grade.parentNode.addEventListener("pointerdown", function (e) {
+        var bt = e.target.closest && e.target.closest(".cat-item");
+        if (!bt || bt.disabled || e.button > 0) return;
+        drag = { bt: bt, i: Number(bt.getAttribute("data-item")), x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY,
+                 top0: palco.scrollTop, ativo: false, id: e.pointerId, raf: 0 };
+      });
+      document.addEventListener("pointermove", function (e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag.cx = e.clientX;
+        drag.cy = e.clientY;
+        if (!drag.ativo) {
+          if (Math.abs(drag.cx - drag.x) + Math.abs(drag.cy - drag.y) < 8) return;
+          drag.ativo = true;
+          drag.bt.classList.add("arrastando");
+          grade.classList.add("escolhendo");
+          try { drag.bt.setPointerCapture(e.pointerId); } catch (er) { /* sem captura */ }
+          drag.raf = window.requestAnimationFrame(rolarSozinho);
+        }
+        e.preventDefault();
+        acompanhar();
+      });
+      function soltar(e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        var d = drag;
+        drag = null;
+        if (!d.ativo) return;
+        window.cancelAnimationFrame(d.raf);
+        aposArrastar = true;
+        setTimeout(function () { aposArrastar = false; }, 0);
+        var z = e.type === "pointerup" ? zonaEm(e.clientX, e.clientY, d.bt) : null;
+        d.bt.classList.remove("arrastando");
+        d.bt.style.transform = "";
+        zonas.forEach(function (zz) { zz.el.classList.remove("sobre"); });
+        grade.classList.toggle("escolhendo", ctx.sel != null);
+        if (z) mover(d.i, Number(z.getAttribute("data-cat")));
+      }
+      document.addEventListener("pointerup", soltar);
+      document.addEventListener("pointercancel", soltar);
+
+      ver.addEventListener("click", function () {
+        var faltam = ctx.pos.filter(function (c) { return c < 0; }).length;
+        if (faltam) {
+          res.innerHTML = "";
+          res.appendChild(texto("div", "resultado parcial",
+            faltam === 1 ? "Falta colocar 1 item numa categoria antes de verificar." : "Faltam " + faltam + " itens para colocar numa categoria antes de verificar."));
+          return;
+        }
+        selecionar(null);
+        ctx.resp = ctx.pos.slice();
+        aplicarCategorizar(b, ui, ctx.resp);
+        ref.focus();
+        ctx.mudou();
+      });
+
+      ref.addEventListener("click", function () {
+        limparMarcasCat(ui);
+        res.innerHTML = "";
+        ver.hidden = false;
+        ref.hidden = true;
+        selecionar(null);
+        ver.focus();
+      });
+
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (ctx.resp || !ctx.ui.itens.length) ? 0 : 1; },
+    estado: function (b, ctx) { return ctx.resp ? ctx.resp.slice() : undefined; },
+    restaurar: function (b, ctx, valor) {
+      var n = ctx.ui.itens.length, m = ctx.ui.zonas.length;
+      if (!valor || valor.length !== n || !n) return;
+      for (var i = 0; i < n; i++) {
+        if (typeof valor[i] !== "number" || valor[i] < 0 || valor[i] >= m) return;
+      }
+      ctx.resp = valor.slice();
+      ctx.pos = valor.slice();
+      aplicarCategorizar(b, ctx.ui, ctx.resp);
     }
   });
 

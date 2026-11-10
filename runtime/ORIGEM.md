@@ -36,3 +36,14 @@ Portados de `base/scorm-kit/js/kit.js` (`Kit.quiz`, `Kit.reflexao`, `Kit.escolha
 - `css/tema.css`: `.btn-act[disabled]` ganhou estilo de desabilitado (o kit tinha `.btn[disabled]`); nenhum pacote antigo tem `.btn-act` desabilitado.
 
 Teste: `node runtime/test/tipos-kit.mjs "$TMPDIR"cev-m6` monta um pacote com a fixture `test/fixtures/kit-v2.data.js` e roda tudo dentro de um iframe de 666px com uma API SCORM 1.2 simulada no pai (1200x666 e 375x666; modo livre com localStorage; falha de gravação). Rodar junto com `montar.mjs` + `comparar.mjs`.
+
+## Classificar em categorias (M6, parte 2)
+
+Tipo novo, sem equivalente no kit nem nos pacotes do ead-scorm. Visual montado com os tokens e peças já aprovados (`.bloco-q`, `.btn-act`, `.resultado`, `.fb`, borda superior colorida com as 4 cores do tema).
+
+- `categorizar`: itens (`button.cat-item`, `aria-pressed`) começam numa bandeja e vão para as categorias (`.cat-zona`, até 4, empilhadas abaixo de 520px). Três formas de mover: arrastar com o ponteiro (com rolagem automática do `#stage` perto da borda); tocar no item e depois no título da categoria (`button.cat-alvo`, ativo só com um item selecionado); ou teclado (Tab, Enter/Espaço no item, Tab até a categoria, Enter; Escape cancela). Cada movimento é anunciado numa região `aria-live` escondida.
+- "Verificar" exige todos os itens colocados; pinta cada item de verde/vermelho, mostra `fb` (com "Não é desta categoria." antes, se errado) e o resultado com "(n de m no lugar certo.)". "Tentar de novo" mantém as posições e destrava. Pendência: verificar uma vez.
+- `suspend_data`: a categoria de cada item na última verificação, na ordem do `data.js` (ex.: `[0,1,1,0]`). Estado com tamanho ou índice inválido é ignorado.
+- Motor: o gesto de deslizar não começa sobre um `.cat-item`.
+
+Teste: `node runtime/test/categorizar.mjs "$TMPDIR"cev-m6` (fixture `test/fixtures/categorizar-v2.data.js`; 1200x666 e 375x666; clique, teclado, arrastar com rolagem, verificação, retomada, estado inválido, conclusão). O `comparar.mjs` passou a usar `tipo-inexistente` como exemplo de tipo desconhecido e espera 200 ms (em vez de 30) pelo `toggle` do `<details>`, que falhava de forma intermitente.

@@ -1,6 +1,7 @@
 import type {
   Bloco,
   Meta,
+  ItemCategorizar,
   OpcaoEscolha,
   OpcaoMultipla,
   Projeto,
@@ -113,11 +114,18 @@ export function novoBloco(tipo: TipoBloco): Bloco {
       return { id, tipo, pergunta: "" };
     case "escolha":
       return { id, tipo, pergunta: "", opcoes: [novaOpcaoEscolha(), novaOpcaoEscolha()] };
+    case "categorizar":
+      // Itens sem categoria: o autor escolhe (a validação cobra).
+      return { id, tipo, enunciado: "", categorias: ["", ""], itens: [novoItemCategorizar(), novoItemCategorizar()] };
   }
 }
 
 export function novaOpcaoMultipla(): OpcaoMultipla {
   return { texto: "", correta: false, fb: "" };
+}
+
+export function novoItemCategorizar(): ItemCategorizar {
+  return { texto: "", categoria: -1, fb: "" };
 }
 
 export function novaOpcaoEscolha(): OpcaoEscolha {

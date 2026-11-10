@@ -227,3 +227,52 @@ describe("compilar: tipos do M6 (multipla, reflexao, escolha)", () => {
     expect(e).toMatchObject({ pergunta: "E?", opcoes: [{ texto: "Um", retorno: SUJO }, { texto: "Dois", retorno: "R2" }] });
   });
 });
+
+describe("compilar: categorizar", () => {
+  const SUJO = 'A & B <c> "d"';
+
+  function projetoCat() {
+    const p = novoProjeto({ curso: "MAPIJ", ud: 4, atividade: "LEITURA", numero: 3, titulo: "T", contexto: "C" });
+    const s = novoSlide("conteudo");
+    s.titulo = "Tela";
+    const c = novoBloco("categorizar");
+    c.enunciado = "Classifique <strong>cada</strong> ação";
+    c.categorias = ["Pais & mães", "<Autoridades>"];
+    c.itens = [
+      { texto: "<em>Acolher</em>", categoria: 0, fb: SUJO, extras: { x: 1 } },
+      { texto: "Investigar", categoria: 1, fb: "" },
+    ];
+    c.msgAcerto = " ";
+    const c2 = novoBloco("categorizar");
+    c2.msgAcerto = SUJO;
+    c2.msgRevisar = "Revise.";
+    s.blocos = [c, c2];
+    p.slides.splice(1, 0, s);
+    return p;
+  }
+
+  const blocos = (p: ReturnType<typeof projetoCat>) =>
+    (compilarConteudo(p).slides[1] as { blocos: Array<Record<string, unknown>> }).blocos;
+
+  it("escapa os títulos das categorias, não os campos de textContent, e omite opcionais vazios", () => {
+    const [c, c2] = blocos(projetoCat());
+    expect(Object.keys(c)).toEqual(["id", "tipo", "enunciado", "categorias", "itens"]);
+    expect(c.categorias).toEqual(["Pais &amp; mães", "&lt;Autoridades&gt;"]);
+    expect(c.itens).toEqual([
+      { texto: "<em>Acolher</em>", categoria: 0, fb: SUJO },
+      { texto: "Investigar", categoria: 1, fb: "" },
+    ]);
+    expect(c2.msgAcerto).toBe(SUJO);
+    expect(c2.msgRevisar).toBe("Revise.");
+  });
+
+  it("ida e volta pelo importador é idempotente", () => {
+    const p = projetoCat();
+    const js1 = compilarDataJs(p);
+    const { projeto: p2, avisos } = importarDataJs(js1);
+    expect(avisos).toEqual([]);
+    expect(compilarDataJs(p2)).toBe(js1);
+    const [c] = (p2.slides[1] as SlideConteudo).blocos;
+    expect(c).toMatchObject({ categorias: ["Pais & mães", "<Autoridades>"], itens: [{ categoria: 0, fb: SUJO }, { categoria: 1 }] });
+  });
+});

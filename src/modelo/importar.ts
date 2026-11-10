@@ -10,6 +10,7 @@ import type {
   ItemContraste,
   ItemLinha,
   Meta,
+  ItemCategorizar,
   OpcaoEscolha,
   OpcaoMultipla,
   Pergunta,
@@ -210,6 +211,13 @@ function lerOpcaoMultipla(o: Obj, av: string[], onde: string): OpcaoMultipla {
   return comExtras(op, l.fim(["texto", "correta", "fb"]));
 }
 
+function lerItemCategorizar(o: Obj, av: string[], onde: string): ItemCategorizar {
+  const l = new Leitor(o, av, onde);
+  const c = l.nOpc("categoria");
+  const it: ItemCategorizar = { texto: l.s("texto"), categoria: c !== undefined && Number.isInteger(c) ? c : -1, fb: l.s("fb") };
+  return comExtras(it, l.fim(["texto", "categoria", "fb"]));
+}
+
 function lerOpcaoEscolha(o: Obj, av: string[], onde: string): OpcaoEscolha {
   const l = new Leitor(o, av, onde);
   return comExtras({ texto: l.s("texto"), retorno: l.s("retorno") }, l.fim(["texto", "retorno"]));
@@ -350,6 +358,7 @@ const CAMPOS_BLOCO: Record<TipoBloco, readonly string[]> = {
   multipla: ["enunciado", "opcoes", "msgAcerto", "msgRevisar"],
   reflexao: ["pergunta", "aviso", "minChars", "maxChars", "opcional"],
   escolha: ["pergunta", "opcoes"],
+  categorizar: ["enunciado", "categorias", "itens", "msgAcerto", "msgRevisar"],
 };
 
 function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
@@ -427,6 +436,22 @@ function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
         opcoes: l.objs("opcoes").map((x, k) => lerOpcaoEscolha(x, av, `${onde}, alternativa ${k + 1}`)),
       };
       break;
+    case "categorizar": {
+      const c: Bloco = {
+        id,
+        tipo,
+        enunciado: l.s("enunciado"),
+        // No data.js os títulos vêm escapados; no projeto são texto simples
+        categorias: l.arr("categorias").map(desescaparHtml),
+        itens: l.objs("itens").map((x, k) => lerItemCategorizar(x, av, `${onde}, item ${k + 1}`)),
+      };
+      const msgAcerto = l.sOpc("msgAcerto");
+      const msgRevisar = l.sOpc("msgRevisar");
+      if (msgAcerto !== undefined) c.msgAcerto = msgAcerto;
+      if (msgRevisar !== undefined) c.msgRevisar = msgRevisar;
+      b = c;
+      break;
+    }
   }
   return comExtras(b, l.fim(["id", "tipo", ...CAMPOS_BLOCO[tipo]]));
 }

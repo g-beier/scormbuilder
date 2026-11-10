@@ -1,6 +1,7 @@
 import {
   CORES,
   MAX_CHARS_REFLEXAO,
+  LIMITES_CATEGORIZAR,
   NOMES_BLOCO,
   PADRAO_REFLEXAO,
   type Bloco,
@@ -94,6 +95,16 @@ export function textosDoBloco(b: Bloco): Array<[campo: string, html: string]> {
       if (b.msgAcerto !== undefined) out.push(["msgAcerto", b.msgAcerto]);
       if (b.msgRevisar !== undefined) out.push(["msgRevisar", b.msgRevisar]);
       break;
+    case "categorizar":
+      out.push(["enunciado", b.enunciado]);
+      b.categorias.forEach((c, i) => out.push([`categorias[${i}]`, c]));
+      b.itens.forEach((it, i) => {
+        out.push([`itens[${i}].texto`, it.texto]);
+        out.push([`itens[${i}].fb`, it.fb]);
+      });
+      if (b.msgAcerto !== undefined) out.push(["msgAcerto", b.msgAcerto]);
+      if (b.msgRevisar !== undefined) out.push(["msgRevisar", b.msgRevisar]);
+      break;
     case "reflexao":
       out.push(["pergunta", b.pergunta]);
       if (b.aviso !== undefined) out.push(["aviso", b.aviso]);
@@ -126,7 +137,8 @@ function textosDoSlide(s: Slide): Array<[string, string]> {
  * cada fluxo de ordenar concluído e cada Confira aberto. Múltipla escolha
  * guarda os índices marcados (≈ 2 caracteres por alternativa + colchetes),
  * reflexão guarda 1 (enviada) e escolha com retorno o índice escolhido;
- * para esses dois, 8 caracteres de folga.
+ * para esses dois, 8 caracteres de folga. Classificar guarda a categoria de
+ * cada item (≈ 2 caracteres por item + colchetes).
  */
 export function estimarSuspendData(projeto: Projeto): number {
   let n = 60; // envelope JSON, chaves e lesson_location
@@ -138,6 +150,7 @@ export function estimarSuspendData(projeto: Projeto): number {
       else if (b.tipo === "ordenar" || b.tipo === "confira") n += b.id.length + 4;
       else if (b.tipo === "multipla") n += b.id.length + 4 + 2 * (b.opcoes?.length ?? 0) + 4;
       else if (b.tipo === "reflexao" || b.tipo === "escolha") n += b.id.length + 4 + 8;
+      else if (b.tipo === "categorizar") n += b.id.length + 4 + 2 * (b.itens?.length ?? 0) + 2;
     }
   }
   return n;
@@ -390,6 +403,46 @@ export function validar(projeto: Projeto): Problema[] {
           if (vazio(o.texto)) erro(`opcoes[${k}].texto`, `a alternativa ${k + 1} está vazia.`);
           if (vazioSimples(o.retorno)) erro(`opcoes[${k}].retorno`, `falta o retorno da alternativa ${k + 1}.`);
         });
+        break;
+      }
+      case "categorizar": {
+        const { minCategorias, maxCategorias, minItens, itensAviso } = LIMITES_CATEGORIZAR;
+        if (vazio(b.enunciado)) erro("enunciado", "falta o enunciado.");
+        const cats = b.categorias ?? [];
+        if (cats.length < minCategorias) erro("categorias", `são necessárias pelo menos ${minCategorias} categorias.`);
+        if (cats.length > maxCategorias) erro("categorias", `use no máximo ${maxCategorias} categorias.`);
+        cats.forEach((c, k) => vazioSimples(c) && erro(`categorias[${k}]`, `falta o nome da categoria ${k + 1}.`));
+        const itens = b.itens ?? [];
+        if (itens.length < minItens) erro("itens", `são necessários pelo menos ${minItens} itens.`);
+        itens.forEach((it, k) => {
+          if (vazio(it.texto)) erro(`itens[${k}].texto`, `o item ${k + 1} está vazio.`);
+          if (!Number.isInteger(it.categoria) || it.categoria < 0 || it.categoria >= cats.length)
+            erro(`itens[${k}].categoria`, `escolha a categoria certa do item ${k + 1}.`);
+        });
+        // Categoria sem nenhum item funciona, mas costuma ser descuido
+        const vazias = cats.map((_, c) => (itens.some((it) => it.categoria === c) ? -1 : c)).filter((c) => c >= 0);
+        if (cats.length >= minCategorias && itens.length >= minItens && vazias.length) {
+          const quais = juntar(vazias.map((c) => String(c + 1)));
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: `categorias[${vazias[0]}]`,
+            mensagem:
+              vazias.length === 1
+                ? `${tela(i)}: no bloco “${nome}”, nenhum item pertence à categoria ${quais}. Confira se é isso mesmo.`
+                : `${tela(i)}: no bloco “${nome}”, nenhum item pertence às categorias ${quais}. Confira se é isso mesmo.`,
+          });
+        }
+        if (itens.length > itensAviso) {
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: "itens",
+            mensagem: `${tela(i)}: o bloco “${nome}” tem ${itens.length} itens. Com mais de ${itensAviso}, a atividade fica longa no celular; considere dividir em duas telas.`,
+          });
+        }
         break;
       }
       default:

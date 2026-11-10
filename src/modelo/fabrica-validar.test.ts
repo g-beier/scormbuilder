@@ -61,6 +61,14 @@ function blocoValido(tipo: Bloco["tipo"]): Bloco {
         { texto: "Inseguro", retorno: "Revise a seção 2." },
       ];
       break;
+    case "categorizar":
+      b.enunciado = "Classifique.";
+      b.categorias = ["Adulto", "Autoridades"];
+      b.itens = [
+        { texto: "Acolher", categoria: 0, fb: "" },
+        { texto: "Investigar", categoria: 1, fb: "Papel das autoridades." },
+      ];
+      break;
   }
   return b;
 }
@@ -156,6 +164,14 @@ describe("validar: erros", () => {
     ["multipla com 1 alternativa", (p) => bl(p, "multipla", (b) => b.opcoes.splice(1)), /pelo menos 2 alternativas/],
     ["multipla sem correta", (p) => bl(p, "multipla", (b) => (b.opcoes[0].correta = false)), /marque pelo menos uma alternativa como correta/],
     ["multipla alternativa vazia", (p) => bl(p, "multipla", (b) => (b.opcoes[1].texto = "")), /“Múltipla escolha”, a alternativa 2 está vazia/],
+    ["categorizar sem enunciado", (p) => bl(p, "categorizar", (b) => (b.enunciado = "")), /“Classificar em categorias”, falta o enunciado/],
+    ["categorizar com 1 categoria", (p) => bl(p, "categorizar", (b) => b.categorias.splice(1)), /pelo menos 2 categorias/],
+    ["categorizar com 5 categorias", (p) => bl(p, "categorizar", (b) => b.categorias.push("c", "d", "e")), /no máximo 4 categorias/],
+    ["categorizar categoria sem nome", (p) => bl(p, "categorizar", (b) => (b.categorias[1] = " ")), /falta o nome da categoria 2/],
+    ["categorizar com 1 item", (p) => bl(p, "categorizar", (b) => b.itens.splice(1)), /pelo menos 2 itens/],
+    ["categorizar item vazio", (p) => bl(p, "categorizar", (b) => (b.itens[0].texto = "<p></p>")), /o item 1 está vazio/],
+    ["categorizar item sem categoria", (p) => bl(p, "categorizar", (b) => (b.itens[1].categoria = -1)), /escolha a categoria certa do item 2/],
+    ["categorizar categoria fora do intervalo", (p) => bl(p, "categorizar", (b) => (b.itens[0].categoria = 2)), /escolha a categoria certa do item 1/],
     ["reflexao sem pergunta", (p) => bl(p, "reflexao", (b) => (b.pergunta = "")), /falta a pergunta para reflexão/],
     ["reflexao min > max", (p) => bl(p, "reflexao", (b) => Object.assign(b, { minChars: 300, maxChars: 200 })), /Mínimo de caracteres” é maior/],
     ["reflexao min > padrão do max", (p) => bl(p, "reflexao", (b) => (b.minChars = 600)), /Mínimo de caracteres” é maior/],
@@ -253,6 +269,25 @@ describe("validar: avisos", () => {
     expect(avisos(p).map((x) => x.mensagem)[0]).toMatch(/a alternativa 1 está sem comentário/);
   });
 
+  it("categorizar: categoria sem itens e itens demais são avisos, não erros", () => {
+    const p = projetoValido();
+    bl(p, "categorizar", (b) => b.categorias.push("Ninguém", "Outros"));
+    expect(erros(p)).toEqual([]);
+    const a = avisos(p);
+    expect(a.map((x) => x.mensagem)).toEqual([
+      "Tela 2: no bloco “Classificar em categorias”, nenhum item pertence às categorias 3 e 4. Confira se é isso mesmo.",
+    ]);
+    expect(a[0].campo).toBe("categorias[2]");
+    bl(p, "categorizar", (b) => {
+      b.categorias.splice(2);
+      for (let k = 0; k < 9; k++) b.itens.push({ texto: `I${k}`, categoria: k % 2, fb: "" });
+    });
+    expect(erros(p)).toEqual([]);
+    expect(avisos(p).map((x) => x.mensagem)).toEqual([
+      "Tela 2: o bloco “Classificar em categorias” tem 11 itens. Com mais de 10, a atividade fica longa no celular; considere dividir em duas telas.",
+    ]);
+  });
+
   it("reflexao: limites no padrão e no máximo permitido são válidos", () => {
     const p = projetoValido();
     bl(p, "reflexao", (b) => Object.assign(b, { minChars: 1, maxChars: 2000, opcional: false, aviso: "" }));
@@ -279,6 +314,9 @@ describe("validar: avisos", () => {
     expect(comM - base).toBe(s.id.length + 4 + m.id.length + 4 + 2 * 2 + 4);
     s.blocos.push(blocoValido("reflexao"), blocoValido("escolha"));
     expect(estimarSuspendData(p) - comM).toBe(2 * (10 + 4 + 8));
+    const antes = estimarSuspendData(p);
+    s.blocos.push(blocoValido("categorizar"));
+    expect(estimarSuspendData(p) - antes).toBe(10 + 4 + 2 * 2 + 2);
   });
 
   it("campo simples com “<” não conta como vazio", () => {

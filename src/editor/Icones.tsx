@@ -36,6 +36,7 @@ const PATHS: Record<string, string> = {
   multipla: "M4 4h6v6H4zM4 14h6v6H4zM5.5 7l1.2 1.2L8.8 5.8M5.5 17l1.2 1.2 2.1-2.4M14 7h6M14 17h6",
   reflexao: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4M13 20h7",
   escolha: "M12 21v-9M12 12 6 6M12 12l6-6M6 6V3M6 6H3M18 6V3M18 6h3",
+  categorizar: "M3 4h8v16H3zM13 4h8v16h-8zM5 8h4M5 12h4M15 8h4",
   capa: "M5 3h14v18H5zM8 8h8M8 12h5",
   conteudo: "M4 4h16v16H4zM8 9h8M8 13h8M8 17h5",
   fim: "M5 21V4M5 4h12l-2 4 2 4H5",
