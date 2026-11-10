@@ -10,12 +10,15 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
-export function useSensoresOrdenaveis() {
-  return useSensors(
-    // Distância mínima: um clique simples na alça não inicia arrasto.
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+/**
+ * `soPonteiro`: sem o sensor de teclado do dnd-kit. Na faixa horizontal ele rola o
+ * contêiner e pula posições; lá o teclado usa Alt + ←/→ (ver ListaSlides).
+ */
+export function useSensoresOrdenaveis(soPonteiro = false) {
+  // Distância mínima: um clique simples não inicia arrasto.
+  const ponteiro = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
+  const teclado = useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates });
+  return useSensors(ponteiro, ...(soPonteiro ? [] : [teclado]));
 }
 
 export const instrucoesLeitor: ScreenReaderInstructions = {
@@ -37,3 +40,7 @@ export function anuncios(nome: (id: string) => string, posicao: (id: string) => 
 
 /** Arrasto só na vertical (listas de uma coluna). */
 export const soVertical: Modifier = ({ transform }) => ({ ...transform, x: 0 });
+
+/** Arrasto só na horizontal (faixas de uma linha). */
+export const soHorizontal: Modifier = ({ transform }) => ({ ...transform, y: 0 });
+

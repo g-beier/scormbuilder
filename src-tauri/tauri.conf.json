@@ -39,6 +39,13 @@
       "../runtime/js/*.js": "runtime/js/",
       "../runtime/fonts/*.woff2": "runtime/fonts/",
       "../runtime/fonts/LICENSE-*.txt": "runtime/fonts/"
-    }
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "11.0"
+    },
+    "publisher": "Escoteiros do Brasil - RS",
+    "shortDescription": "Construtor de pacotes SCORM 1.2 para o Campo Escola Virtual",
+    "category": "Education"
   }
 }

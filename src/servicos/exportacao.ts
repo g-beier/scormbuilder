@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
-export type FormatoExportacao = "pasta" | "zip";
+export type FormatoExportacao = "pasta" | "zip" | "pdf";
 
 /** Espelha `EntradaExportacao` do Rust (camelCase). */
 export interface EntradaExportacao {
@@ -48,6 +48,18 @@ export function exportarPacote(
   sobrescrever = false,
 ): Promise<ResultadoExportacao> {
   return invoke<ResultadoExportacao>("exportar_pacote", { entrada, destino, formato, sobrescrever });
+}
+
+/**
+ * Gera `<destino>/<nomePacote>.pdf`, o PDF da leitura (M7): marcado (PDF/UA-1),
+ * compilado pelo Typst no backend a partir de `fonte` (de `gerarTypst`).
+ */
+export function exportarPdf(
+  entrada: { nomePacote: string; fonte: string },
+  destino: string,
+  sobrescrever = false,
+): Promise<ResultadoExportacao> {
+  return invoke<ResultadoExportacao>("exportar_pdf", { entrada, destino, sobrescrever });
 }
 
 export function lerPreferencias(): Promise<Preferencias> {

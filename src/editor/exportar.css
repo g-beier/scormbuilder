@@ -116,3 +116,21 @@
   color: var(--perigo);
   white-space: pre-line;
 }
+
+/* PDF da leitura (M7) */
+.exportar-pdf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--borda);
+}
+.exportar-pdf p {
+  flex: 1 1 260px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

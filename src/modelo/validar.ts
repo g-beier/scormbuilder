@@ -1,6 +1,9 @@
 import {
   CORES,
+  MAX_CHARS_REFLEXAO,
+  LIMITES_CATEGORIZAR,
   NOMES_BLOCO,
+  PADRAO_REFLEXAO,
   type Bloco,
   type Problema,
   type Projeto,
@@ -83,6 +86,45 @@ export function textosDoBloco(b: Bloco): Array<[campo: string, html: string]> {
       out.push(["titulo", b.titulo]);
       lista("paras", b.paras);
       break;
+    case "multipla":
+      out.push(["enunciado", b.enunciado]);
+      b.opcoes.forEach((o, i) => {
+        out.push([`opcoes[${i}].texto`, o.texto]);
+        out.push([`opcoes[${i}].fb`, o.fb]);
+      });
+      if (b.msgAcerto !== undefined) out.push(["msgAcerto", b.msgAcerto]);
+      if (b.msgRevisar !== undefined) out.push(["msgRevisar", b.msgRevisar]);
+      break;
+    case "ramificado":
+      b.perguntas.forEach((p, k) => {
+        out.push([`perguntas[${k}].enunciado`, p.enunciado]);
+        p.alternativas.forEach((a, j) => {
+          out.push([`perguntas[${k}].alternativas[${j}].texto`, a.texto]);
+          out.push([`perguntas[${k}].alternativas[${j}].retorno`, a.retorno]);
+        });
+      });
+      break;
+    case "categorizar":
+      out.push(["enunciado", b.enunciado]);
+      b.categorias.forEach((c, i) => out.push([`categorias[${i}]`, c]));
+      b.itens.forEach((it, i) => {
+        out.push([`itens[${i}].texto`, it.texto]);
+        out.push([`itens[${i}].fb`, it.fb]);
+      });
+      if (b.msgAcerto !== undefined) out.push(["msgAcerto", b.msgAcerto]);
+      if (b.msgRevisar !== undefined) out.push(["msgRevisar", b.msgRevisar]);
+      break;
+    case "reflexao":
+      out.push(["pergunta", b.pergunta]);
+      if (b.aviso !== undefined) out.push(["aviso", b.aviso]);
+      break;
+    case "escolha":
+      out.push(["pergunta", b.pergunta]);
+      b.opcoes.forEach((o, i) => {
+        out.push([`opcoes[${i}].texto`, o.texto]);
+        out.push([`opcoes[${i}].retorno`, o.retorno]);
+      });
+      break;
   }
   return out;
 }
@@ -101,7 +143,12 @@ function textosDoSlide(s: Slide): Array<[string, string]> {
 /**
  * Estimativa conservadora do tamanho do suspend_data: supõe que o motor
  * guarda, por id, cada tela visitada, cada pergunta respondida (com índice),
- * cada fluxo de ordenar concluído e cada Confira aberto.
+ * cada fluxo de ordenar concluído e cada Confira aberto. Múltipla escolha
+ * guarda os índices marcados (≈ 2 caracteres por alternativa + colchetes),
+ * reflexão guarda 1 (enviada) e escolha com retorno o índice escolhido;
+ * para esses dois, 8 caracteres de folga. Classificar guarda a categoria de
+ * cada item (≈ 2 caracteres por item + colchetes). Questionário com caminhos
+ * guarda `{"r":[alternativa de cada pergunta],"e":1}` (≈ 3 por pergunta + 14).
  */
 export function estimarSuspendData(projeto: Projeto): number {
   let n = 60; // envelope JSON, chaves e lesson_location
@@ -111,6 +158,10 @@ export function estimarSuspendData(projeto: Projeto): number {
     for (const b of s.blocos) {
       if (b.tipo === "quiz") n += b.perguntas.length * (b.id.length + 10);
       else if (b.tipo === "ordenar" || b.tipo === "confira") n += b.id.length + 4;
+      else if (b.tipo === "multipla") n += b.id.length + 4 + 2 * (b.opcoes?.length ?? 0) + 4;
+      else if (b.tipo === "reflexao" || b.tipo === "escolha") n += b.id.length + 4 + 8;
+      else if (b.tipo === "ramificado") n += b.id.length + 4 + 14 + 3 * (b.perguntas?.length ?? 0);
+      else if (b.tipo === "categorizar") n += b.id.length + 4 + 2 * (b.itens?.length ?? 0) + 2;
     }
   }
   return n;
@@ -316,6 +367,176 @@ export function validar(projeto: Projeto): Problema[] {
         if (vazioSimples(b.titulo)) erro("titulo", "falta o título da janela.");
         listaObrigatoria("paras", b.paras, "escreva o texto que aparece ao abrir.", "o parágrafo {n} está vazio.");
         break;
+      case "multipla": {
+        if (vazio(b.enunciado)) erro("enunciado", "falta o enunciado.");
+        const opcoes = b.opcoes ?? [];
+        if (opcoes.length < 2) erro("opcoes", "são necessárias pelo menos 2 alternativas.");
+        opcoes.forEach((o, k) => vazio(o.texto) && erro(`opcoes[${k}].texto`, `a alternativa ${k + 1} está vazia.`));
+        if (opcoes.length > 0 && !opcoes.some((o) => o.correta === true)) {
+          erro(`opcoes[0].correta`, "marque pelo menos uma alternativa como correta.");
+        }
+        // Comentário vazio é aviso: o pacote funciona (o aluno ainda vê “Errado.”
+        // ou “Faltou marcar esta.”), mas perde a explicação daquela alternativa.
+        const semFb = opcoes.map((o, k) => (vazioSimples(o.fb) ? k : -1)).filter((k) => k >= 0);
+        if (semFb.length) {
+          const quais = juntar(semFb.map((k) => String(k + 1)));
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: `opcoes[${semFb[0]}].fb`,
+            mensagem:
+              semFb.length === 1
+                ? `${tela(i)}: no bloco “${nome}”, a alternativa ${quais} está sem comentário. Escreva o que o aluno deve ler ao verificar a resposta.`
+                : `${tela(i)}: no bloco “${nome}”, as alternativas ${quais} estão sem comentário. Escreva o que o aluno deve ler ao verificar a resposta.`,
+          });
+        }
+        break;
+      }
+      case "reflexao": {
+        if (vazio(b.pergunta)) erro("pergunta", "falta a pergunta para reflexão.");
+        const min = b.minChars ?? PADRAO_REFLEXAO.minChars;
+        const max = b.maxChars ?? PADRAO_REFLEXAO.maxChars;
+        const minOk = Number.isInteger(min) && min >= 1;
+        const maxOk = Number.isInteger(max) && max >= 1 && max <= MAX_CHARS_REFLEXAO;
+        if (!minOk) erro("minChars", "o “Mínimo de caracteres” precisa ser um número inteiro de 1 para cima.");
+        if (!Number.isInteger(max) || max < 1) erro("maxChars", "o “Máximo de caracteres” precisa ser um número inteiro de 1 para cima.");
+        else if (max > MAX_CHARS_REFLEXAO)
+          erro("maxChars", `o “Máximo de caracteres” passa de ${MAX_CHARS_REFLEXAO}, o limite que o Moodle registra com segurança. Use até ${MAX_CHARS_REFLEXAO}.`);
+        if (minOk && maxOk && min > max) erro("minChars", "o “Mínimo de caracteres” é maior que o “Máximo”. Diminua o mínimo ou aumente o máximo.");
+        break;
+      }
+      case "escolha": {
+        if (vazio(b.pergunta)) erro("pergunta", "falta a pergunta.");
+        const opcoes = b.opcoes ?? [];
+        if (opcoes.length < 2) erro("opcoes", "são necessárias pelo menos 2 alternativas.");
+        opcoes.forEach((o, k) => {
+          if (vazio(o.texto)) erro(`opcoes[${k}].texto`, `a alternativa ${k + 1} está vazia.`);
+          if (vazioSimples(o.retorno)) erro(`opcoes[${k}].retorno`, `falta o retorno da alternativa ${k + 1}.`);
+        });
+        break;
+      }
+      case "ramificado": {
+        const perguntas = b.perguntas ?? [];
+        if (perguntas.length === 0) {
+          erro("perguntas", "adicione pelo menos uma pergunta.");
+          break;
+        }
+        const pos = new Map<string, number>();
+        perguntas.forEach((p, k) => {
+          if (!p.id || pos.has(p.id)) erro(`perguntas[${k}].enunciado`, `a pergunta ${k + 1} ficou duplicada por engano. Exclua-a e adicione de novo.`);
+          else pos.set(p.id, k);
+        });
+        let destinosOk = true;
+        perguntas.forEach((p, k) => {
+          const n = k + 1;
+          if (vazio(p.enunciado)) erro(`perguntas[${k}].enunciado`, `falta o enunciado da pergunta ${n}.`);
+          const alts = p.alternativas ?? [];
+          if (alts.length < 2) erro(`perguntas[${k}].alternativas`, `a pergunta ${n} precisa de pelo menos 2 alternativas.`);
+          alts.forEach((a, j) => {
+            const campo = `perguntas[${k}].alternativas[${j}]`;
+            if (vazio(a.texto)) erro(`${campo}.texto`, `a alternativa ${j + 1} da pergunta ${n} está vazia.`);
+            if (a.proxima === p.id) {
+              destinosOk = false;
+              erro(`${campo}.proxima`, `a alternativa ${j + 1} da pergunta ${n} leva para a própria pergunta. Escolha outra pergunta ou “Fim do questionário”.`);
+            } else if (a.proxima !== "fim" && !pos.has(a.proxima)) {
+              destinosOk = false;
+              erro(`${campo}.proxima`, `a alternativa ${j + 1} da pergunta ${n} leva para uma pergunta que não existe mais. Escolha outra.`);
+            }
+          });
+        });
+        if (!destinosOk) break;
+        // Ciclos: um caminho que volta a uma pergunta já respondida nunca termina
+        const estado = new Array<0 | 1 | 2>(perguntas.length).fill(0); // 0 = não visitada, 1 = no caminho, 2 = pronta
+        let ciclo = null as [number, number] | null;
+        const visitar = (k: number) => {
+          estado[k] = 1;
+          for (const a of perguntas[k].alternativas ?? []) {
+            if (ciclo || a.proxima === "fim") continue;
+            const d = pos.get(a.proxima)!;
+            if (estado[d] === 1) ciclo = [k, d];
+            else if (estado[d] === 0) visitar(d);
+          }
+          estado[k] = 2;
+        };
+        perguntas.forEach((_, k) => estado[k] === 0 && !ciclo && visitar(k));
+        if (ciclo) {
+          const [de, para] = ciclo;
+          erro(
+            `perguntas[${de}].alternativas`,
+            `a pergunta ${de + 1} leva de volta à pergunta ${para + 1}, e o questionário nunca chegaria ao fim. Ajuste o “Depois desta, ir para”.`,
+          );
+          break;
+        }
+        // Perguntas que nenhum caminho a partir da 1 alcança
+        const alcancadas = new Set<number>([0]);
+        const fila = [0];
+        while (fila.length) {
+          const k = fila.shift()!;
+          for (const a of perguntas[k].alternativas ?? []) {
+            const d = a.proxima === "fim" ? undefined : pos.get(a.proxima);
+            if (d !== undefined && !alcancadas.has(d)) {
+              alcancadas.add(d);
+              fila.push(d);
+            }
+          }
+        }
+        const soltas = perguntas.map((_, k) => k).filter((k) => !alcancadas.has(k));
+        if (soltas.length) {
+          const quais = juntar(soltas.map((k) => String(k + 1)));
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: `perguntas[${soltas[0]}].enunciado`,
+            mensagem:
+              soltas.length === 1
+                ? `${tela(i)}: no bloco “${nome}”, nenhum caminho chega à pergunta ${quais}. Confira o “Depois desta, ir para” das perguntas anteriores.`
+                : `${tela(i)}: no bloco “${nome}”, nenhum caminho chega às perguntas ${quais}. Confira o “Depois desta, ir para” das perguntas anteriores.`,
+          });
+        }
+        break;
+      }
+      case "categorizar": {
+        const { minCategorias, maxCategorias, minItens, itensAviso } = LIMITES_CATEGORIZAR;
+        if (vazio(b.enunciado)) erro("enunciado", "falta o enunciado.");
+        const cats = b.categorias ?? [];
+        if (cats.length < minCategorias) erro("categorias", `são necessárias pelo menos ${minCategorias} categorias.`);
+        if (cats.length > maxCategorias) erro("categorias", `use no máximo ${maxCategorias} categorias.`);
+        cats.forEach((c, k) => vazioSimples(c) && erro(`categorias[${k}]`, `falta o nome da categoria ${k + 1}.`));
+        const itens = b.itens ?? [];
+        if (itens.length < minItens) erro("itens", `são necessários pelo menos ${minItens} itens.`);
+        itens.forEach((it, k) => {
+          if (vazio(it.texto)) erro(`itens[${k}].texto`, `o item ${k + 1} está vazio.`);
+          if (!Number.isInteger(it.categoria) || it.categoria < 0 || it.categoria >= cats.length)
+            erro(`itens[${k}].categoria`, `escolha a categoria certa do item ${k + 1}.`);
+        });
+        // Categoria sem nenhum item funciona, mas costuma ser descuido
+        const vazias = cats.map((_, c) => (itens.some((it) => it.categoria === c) ? -1 : c)).filter((c) => c >= 0);
+        if (cats.length >= minCategorias && itens.length >= minItens && vazias.length) {
+          const quais = juntar(vazias.map((c) => (cats[c].trim() ? `“${cats[c].trim()}”` : String(c + 1))));
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: `categorias[${vazias[0]}]`,
+            mensagem:
+              vazias.length === 1
+                ? `${tela(i)}: no bloco “${nome}”, nenhum item pertence à categoria ${quais}. Confira se é isso mesmo.`
+                : `${tela(i)}: no bloco “${nome}”, nenhum item pertence às categorias ${quais}. Confira se é isso mesmo.`,
+          });
+        }
+        if (itens.length > itensAviso) {
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: "itens",
+            mensagem: `${tela(i)}: o bloco “${nome}” tem ${itens.length} itens. Com mais de ${itensAviso}, a atividade fica longa no celular; considere até 3 categorias e 8 itens, ou dividir em duas telas.`,
+          });
+        }
+        break;
+      }
       default:
         erro(undefined, `o tipo de bloco “${(b as { tipo: string }).tipo}” não é conhecido. Exclua este bloco.`);
     }

@@ -199,7 +199,7 @@ async function cumprirTela(page, log) {
   }
   for (const q of await page.$$(".slide.active .quiz-q")) { const b = await q.$(".quiz-opc:not([disabled])"); if (b) await b.click(); }
   for (const s of await page.$$(".slide.active .sugestao summary")) await s.click();
-  await page.waitForTimeout(30); // o evento "toggle" do <details> é assíncrono
+  await page.waitForTimeout(200); // o evento "toggle" do <details> é assíncrono
   for (const m of await page.$$(".slide.active .btn-more")) {
     await m.click();
     await page.keyboard.press("Escape");
@@ -280,7 +280,7 @@ console.log(`  ${concluidas}/${TODAS.length} UDs concluídas; maior suspend_data
   ok(await nextDis(page), "ordenar: bloqueado até abrir a sugestão");
   ok((await avisoAtual(page)) === "Abra a sugestão para avançar.", "texto do aviso do ordenar");
   await page.click(".slide.active .sugestao summary");
-  await page.waitForTimeout(30);
+  await page.waitForTimeout(200);
   ok(!(await nextDis(page)), "ordenar: libera ao abrir a sugestão");
   // Fim com pendências: modo aluno não pula, então confere o texto via API do motor
   await ctx.close();
@@ -332,7 +332,7 @@ console.log(`  ${concluidas}/${TODAS.length} UDs concluídas; maior suspend_data
       if (i === 1) o.blocos = o.blocos.concat([{ id: "b-ffffffff", tipo: "cards", cards: [{ cor: "navy" }, { cor: "green", titulo: "Só título" }] }, { id: "b-fffffffe", tipo: "ordenar", nome: "N", passos: ["a", "b"], porque: "p" }]);
       return o;
     }) },
-    desconhecido: { ...C, slides: C.slides.map((s, i) => (i === 1 ? { ...s, blocos: [{ id: "x1", tipo: "categorizar" }, ...s.blocos] } : s)) },
+    desconhecido: { ...C, slides: C.slides.map((s, i) => (i === 1 ? { ...s, blocos: [{ id: "x1", tipo: "tipo-inexistente" }, ...s.blocos] } : s)) },
   };
   for (const [nome, cont] of Object.entries(casos)) {
     fs.writeFileSync(path.join(dir, `js/data-${nome}.js`), "window.CONTEUDO = " + JSON.stringify(cont) + ";");
@@ -349,7 +349,7 @@ console.log(`  ${concluidas}/${TODAS.length} UDs concluídas; maior suspend_data
     } else if (nome === "desconhecido") {
       await page.click("#next");
       const aviso = await page.$eval(".slide.active .nota", (e) => e.textContent);
-      ok(/categorizar/.test(aviso), "tipo desconhecido: aviso discreto");
+      ok(/tipo-inexistente/.test(aviso), "tipo desconhecido: aviso discreto");
       ok((await page.$$(".slide.active .card")).length === 0 || true, "");
       console.log(`  ${nome}: "${aviso}"`);
     } else {

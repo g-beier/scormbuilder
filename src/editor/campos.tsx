@@ -92,6 +92,55 @@ export function CampoRico({
   );
 }
 
+/**
+ * Número inteiro opcional. Vazio = valor padrão (mostrado no placeholder e na ajuda).
+ * `aoMudar(undefined)` quando o campo é apagado.
+ */
+export function CampoNumero({
+  rotulo,
+  ajuda,
+  foco,
+  valor,
+  padrao,
+  min,
+  max,
+  aoMudar,
+}: PropsCampoBase & {
+  valor: number | undefined;
+  padrao: number;
+  min?: number;
+  max?: number;
+  aoMudar(v: number | undefined): void;
+}) {
+  const id = useId();
+  return (
+    <div className="campo campo-numero">
+      <label htmlFor={id}>{rotulo}</label>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        step={1}
+        min={min}
+        max={max}
+        value={valor ?? ""}
+        placeholder={String(padrao)}
+        data-foco={foco}
+        aria-describedby={ajuda ? `${id}-ajuda` : undefined}
+        onChange={(e) => {
+          const t = e.target.value.trim();
+          aoMudar(t === "" ? undefined : Number(t));
+        }}
+      />
+      {ajuda && (
+        <p id={`${id}-ajuda`} className="ajuda">
+          {ajuda}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---------- Lista editável ----------
 
 export interface PropsListaEditavel<T> {
@@ -107,6 +156,8 @@ export interface PropsListaEditavel<T> {
   textoAdicionar: string;
   /** Não deixa remover abaixo deste número. */
   minimo?: number;
+  /** Esconde o "Adicionar" ao chegar neste número. */
+  maximo?: number;
   /** Chave data-foco da lista (o painel de problemas foca aqui se a lista estiver vazia). */
   foco?: string;
   /** Itens com cartão próprio (cards, perguntas) em vez de linha compacta. */
@@ -124,6 +175,7 @@ export function ListaEditavel<T>({
   aoMover,
   textoAdicionar,
   minimo = 0,
+  maximo,
   foco,
   emCaixa,
 }: PropsListaEditavel<T>) {
@@ -214,9 +266,13 @@ export function ListaEditavel<T>({
           </li>
         ))}
       </ol>
-      <button type="button" className="btn btn-pequeno btn-adicionar" onClick={adicionarEFocar}>
-        <Icone nome="mais" /> {textoAdicionar}
-      </button>
+      {maximo === undefined || itens.length < maximo ? (
+        <button type="button" className="btn btn-pequeno btn-adicionar" onClick={adicionarEFocar}>
+          <Icone nome="mais" /> {textoAdicionar}
+        </button>
+      ) : (
+        <p className="ajuda">Máximo de {maximo}.</p>
+      )}
     </fieldset>
   );
 }

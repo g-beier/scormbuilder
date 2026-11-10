@@ -1,4 +1,5 @@
 mod exportar;
+mod pdf;
 mod projetos;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -24,6 +25,7 @@ pub fn run() {
             exportar::exportar_pacote,
             exportar::ler_preferencias,
             exportar::salvar_preferencias,
+            pdf::exportar_pdf,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

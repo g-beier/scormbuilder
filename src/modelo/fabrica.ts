@@ -1,6 +1,11 @@
 import type {
   Bloco,
   Meta,
+  AlternativaRamificada,
+  ItemCategorizar,
+  PerguntaRamificada,
+  OpcaoEscolha,
+  OpcaoMultipla,
   Projeto,
   Slide,
   SlideCapa,
@@ -99,7 +104,48 @@ export function novoBloco(tipo: TipoBloco): Bloco {
       return { id, tipo, botao: "Confira", titulo: "", paras: [""] };
     case "fonte":
       return { id, tipo, html: "" };
+    case "multipla":
+      // Nenhuma marcada como correta: o autor escolhe (a validação cobra).
+      return {
+        id,
+        tipo,
+        enunciado: "",
+        opcoes: [novaOpcaoMultipla(), novaOpcaoMultipla()],
+      };
+    case "reflexao":
+      return { id, tipo, pergunta: "" };
+    case "escolha":
+      return { id, tipo, pergunta: "", opcoes: [novaOpcaoEscolha(), novaOpcaoEscolha()] };
+    case "ramificado": {
+      // Duas perguntas em sequência: 1 → 2 → fim
+      const p2 = novaPerguntaRamificada("fim");
+      return { id, tipo, perguntas: [novaPerguntaRamificada(p2.id), p2] };
+    }
+    case "categorizar":
+      // Itens sem categoria: o autor escolhe (a validação cobra).
+      return { id, tipo, enunciado: "", categorias: ["", ""], itens: [novoItemCategorizar(), novoItemCategorizar()] };
   }
+}
+
+export function novaOpcaoMultipla(): OpcaoMultipla {
+  return { texto: "", correta: false, fb: "" };
+}
+
+export function novoItemCategorizar(): ItemCategorizar {
+  return { texto: "", categoria: -1, fb: "" };
+}
+
+export function novaAlternativaRamificada(proxima: string): AlternativaRamificada {
+  return { texto: "", retorno: "", proxima };
+}
+
+/** Pergunta com duas alternativas que levam a `proxima`. */
+export function novaPerguntaRamificada(proxima: string): PerguntaRamificada {
+  return { id: novoId("q"), enunciado: "", alternativas: [novaAlternativaRamificada(proxima), novaAlternativaRamificada(proxima)] };
+}
+
+export function novaOpcaoEscolha(): OpcaoEscolha {
+  return { texto: "", retorno: "" };
 }
 
 function clonar<T>(v: T): T {

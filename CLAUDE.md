@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Aplicativo desktop (Tauri 2 + React 19 + TypeScript + Vite) para **construir pacotes SCORM 1.2** de forma amigável, para o Moodle do Campo Escola Virtual (CEV) dos Escoteiros do Brasil. O usuário escolhe tipos de slide (capa, cards, quiz, arrastar para ordenar, linha do tempo, "Confira", fim etc.), preenche formulários e o app gera o `js/data.js`, o `imsmanifest.xml` e o `.zip` pronto para o Moodle.
 
-É um **builder**: cria SCORMs novos a partir de um projeto próprio, com um runtime próprio. O `~/Dev/ead-scorm` é fonte de conhecimento e de importação, não modelo a copiar. Plano de módulos (M0–M6): `~/.claude/plans/vamos-planejar-o-desenvolvimento-enumerated-trinket.md`. Idioma da interface e dos textos: português do Brasil.
+É um **builder**: cria SCORMs novos a partir de um projeto próprio, com um runtime próprio. O `~/Dev/ead-scorm` é fonte de conhecimento e de importação, não modelo a copiar. Plano de módulos (M0–M7): `~/.claude/plans/vamos-planejar-o-desenvolvimento-enumerated-trinket.md`. Idioma da interface e dos textos: português do Brasil.
 
 ## Comandos
 
@@ -24,6 +24,9 @@ npx vitest run -t "nomePacote"               # um teste pelo nome
 cd src-tauri && cargo clippy -- -D warnings
 # runtime: converte os 18 LEITURA2 do ead-scorm, compara com o original (Playwright) e testa bloqueio/conclusão/retomada
 node runtime/test/montar.mjs "$TMPDIR"cev-m0 && node runtime/test/comparar.mjs "$TMPDIR"cev-m0
+node runtime/test/tipos-kit.mjs "$TMPDIR"cev-m6 && node runtime/test/categorizar.mjs "$TMPDIR"cev-m6 && node runtime/test/ramificado.mjs "$TMPDIR"cev-m6   # tipos do M6
+# PDF da leitura (M7): gera os .typ das fixtures e dos LEITURA2 e compila com validação PDF/UA-1
+PDF_SAIDA="$TMPDIR"cev-typst npx vitest run src/modelo/pdf.test.ts && (cd src-tauri && PDF_SAIDA="$TMPDIR"cev-typst cargo test --lib compila_fixtures -- --ignored)
 ```
 
 O teste de ouro em `src/modelo/importar.test.ts` lê `~/Dev/ead-scorm/*_LEITURA2/js/data.js`. Se a pasta não existir, ele é pulado.
@@ -36,6 +39,7 @@ runtime/        motor que vai DENTRO de cada pacote: ES5, sem build, offline (in
 src/modelo/     TS puro: tipos do Projeto, fábrica, validar (mensagens pt-BR), compilar (Projeto → data.js v2), importar (data.js legado/v2 → Projeto)
 src/servicos/   wrappers de invoke() (rascunhos.ts) e autosave com debounce (autosave.ts)
 src/estado/, src/telas/, src/editor/, src/previa/   UI (store zustand+immer+zundo, Início, Editor, prévia)
+src/modelo/pdf.ts   PDF da leitura (M7): data.js v2 → documento Typst (texto sempre como string literal; sem gabarito; capa = cabeçalho; sem tela de fim; Confira no anexo)
 src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.json e arquivos .cevscorm), lib.rs (registro)
 ```
 
@@ -45,6 +49,10 @@ src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.js
 ### Projeto (`.cevscorm` / rascunho) ≠ `data.js`
 
 O projeto (`src/modelo/tipos.ts`) é `{ formato: "cev-scorm-builder", versao: 1, id (uuid), meta: { curso, ud, atividade, numero, titulo, contexto }, slides, criadoEm, atualizadoEm, extras? }`. Slides e blocos têm ids curtos estáveis (`s-xxxxxxxx`, `b-xxxxxxxx`). Campos desconhecidos vindos de importação ficam em `extras` e nunca são descartados, mas também não vão para o pacote. `compilarDataJs` é determinístico. O nome do pacote vem de `nomePacote(meta)` = `CURSO_UD<n>_<ATIVIDADE><n>`, que também é o `CONTEUDO.id` e a chave de storage.
+
+### PDF da leitura (M7)
+
+O formato "PDF da leitura" do Exportar grava `<pacote>.pdf` direto, sem diálogo de impressão: `gerarTypst` (front) produz o documento e `src-tauri/src/pdf.rs` compila com o Typst (crates `typst`, `typst-pdf`, `typst-layout`), com as fontes Poppins/Krona One de `src-tauri/fonts/` embutidas e as do `typst-assets` como reserva. O PDF sai marcado e validado como PDF/UA-1; se algum símbolo do conteúdo não tiver glifo, sai marcado sem o selo UA. Bloco novo precisa de um `case` em `gerarTypst` (versão para preencher, sem respostas).
 
 ## Agentes (`.claude/agents/`)
 
@@ -76,13 +84,20 @@ window.CONTEUDO = { formato: 2, id: "CTGESTAO_UD11_LEITURA2", contexto, titulo, 
 { tipo: "contraste", itens: [{ cor, titulo, texto }] }
 { tipo: "destaque", html }              { tipo: "confira", botao, titulo, paras }   // modal; id do bloco = id do modal
 { tipo: "fonte", html }
+{ tipo: "multipla", enunciado, opcoes: [{ texto, correta: bool, fb }], msgAcerto?, msgRevisar? }   // "Verificar respostas"
+{ tipo: "reflexao", pergunta, aviso?, minChars? (10), maxChars? (500), opcional? (true) }   // envia via Scorm.gravarResposta
+{ tipo: "escolha", pergunta, opcoes: [{ texto, retorno }] }                                    // sem gabarito
+{ tipo: "categorizar", enunciado, categorias: [texto 2–4], itens: [{ texto, categoria: índice, fb }], msgAcerto?, msgRevisar? }   // "Verificar"
+{ tipo: "ramificado", perguntas: [{ id, enunciado, alternativas: [{ texto, retorno, proxima: id da pergunta | "fim" }] }] }   // uma por vez; resumo + "Registrar respostas"
 ```
+
+Escape: campos HTML e campos simples inseridos via innerHTML são escapados pelo compilador. Já os campos que o motor insere via **textContent** não são escapados: `quiz.explica`, `multipla.opcoes[].fb`, `msgAcerto`, `msgRevisar`, `reflexao.aviso`, `escolha.opcoes[].retorno`, `categorizar.itens[].fb`, `ramificado.perguntas[].alternativas[].retorno` e `contexto`. Os títulos de `categorizar.categorias` são texto simples e são escapados. Na reflexão, `aviso` ausente usa o texto padrão, e `""` deixa a reflexão sem aviso (o compilador omite o campo quando está vazio).
 
 - `Motor.iniciar(conteudo, { chave?, telaInicial?, livre? })`. `livre` é o modo autor: não bloqueia o "Próximo" e esconde o aviso, mas as pendências continuam contando. `telaInicial` tem prioridade sobre `lesson_location`. A chamada devolve `{ ir, tela, total, pendencias, pendenciaTela, concluido }`.
 - Tipo novo de bloco: `Motor.bloco(tipo, { render(b, ctx), pendentes, aviso, falta: [sing, plural], estado, restaurar })`. Tipo desconhecido gera um aviso discreto, sem quebrar.
 - Textos vão por `innerHTML`, então aceitam `<strong>`, `<em>` e `<a target='_blank' rel='noopener'>`.
 - O "Próximo" fica bloqueado até o aluno responder os quizzes, abrir a sugestão de cada `ordenar` e abrir cada `confira`. A conclusão exige isso em todas as telas.
-- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar e confira = `1`. O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
+- `suspend_data` = `{"v":[telas visitadas],"b":{"<tela>.<bloco>":estado}}`. O estado é: quiz = índices escolhidos (`null` = não respondida); ordenar, confira e reflexao (enviada) = `1`; multipla = índices marcados na última verificação; escolha = índice; categorizar = categoria de cada item na última verificação; ramificado = `{"r":[alternativa de cada pergunta, -1 = sem resposta],"e":1 se registrado}`. O texto da reflexão nunca entra no suspend_data, só em `cmi.interactions` (o ramificado também grava lá uma interação por pergunta do caminho, `<id do bloco>-P<n>`). O limite do SCORM 1.2 é 4096 caracteres; o maior valor medido nos pacotes reais foi 133. Ao mudar esse formato, atualize `estimarSuspendData` em `src/modelo/validar.ts`.
 - Diferente do motor antigo: o runtime **não** divide `ordenar` em várias telas (a importação de legado faz isso), e o progresso também é salvo em localStorage fora do LMS.
 - Mudar o runtime exige rodar `runtime/test/` (comparação com o original) e atualizar o `runtime/ORIGEM.md`.
 

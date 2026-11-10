@@ -2,7 +2,9 @@
  * Diálogo "Exportar pacote": confere se há itens a corrigir, escolhe Zip
  * (para o Moodle) ou Pasta, o destino (lembrado entre sessões) e chama o
  * comando Rust `exportar_pacote`. Também oferece o atalho para a pasta do
- * repositório ead-scorm, quando ela estiver definida.
+ * repositório ead-scorm, quando ela estiver definida. O formato "PDF da leitura"
+ * (M7) grava direto um PDF acessível (PDF/UA-1), gerado pelo Typst no backend,
+ * para o aluno baixar e guardar como registro.
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Dialogo } from "./Dialogo";
@@ -10,12 +12,14 @@ import { Icone } from "./Icones";
 import "./exportar.css";
 import type { Projeto } from "../modelo/tipos";
 import { validar } from "../modelo/validar";
-import { compilarDataJs, nomePacote } from "../modelo/compilar";
+import { compilarConteudo, compilarDataJs, nomePacote } from "../modelo/compilar";
+import { gerarTypst } from "../modelo/pdf";
 import { confirmar } from "../servicos/dialogos";
 import { emTauri, mensagemDeErro, MSG_SO_NO_APP } from "../servicos/ambiente";
 import {
   escolherPasta,
   exportarPacote,
+  exportarPdf,
   jaExiste,
   juntarCaminho,
   lerPreferencias,
@@ -83,16 +87,26 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
     setExportando(true);
     setErro(null);
     setResultado(null);
-    const entrada = { nomePacote: nome, titulo: projeto.meta.titulo, dataJs: compilarDataJs(projeto) };
+    const gerar = (sobrescrever: boolean) =>
+      fmt === "pdf"
+        ? exportarPdf(
+            { nomePacote: nome, fonte: gerarTypst(compilarConteudo(projeto), { gerado: new Date().toLocaleDateString("pt-BR") }) },
+            pastaMae,
+            sobrescrever,
+          )
+        : exportarPacote({ nomePacote: nome, titulo: projeto.meta.titulo, dataJs: compilarDataJs(projeto) }, pastaMae, fmt, sobrescrever);
     try {
       let r: ResultadoExportacao;
       try {
-        r = await exportarPacote(entrada, pastaMae, fmt, false);
+        r = await gerar(false);
       } catch (e) {
         if (!jaExiste(e)) throw e;
-        const ok = await confirmar(mensagemJaExiste(e), { titulo: "Substituir pacote?", botaoOk: "Substituir" });
+        const ok = await confirmar(mensagemJaExiste(e), {
+          titulo: fmt === "pdf" ? "Substituir PDF?" : "Substituir pacote?",
+          botaoOk: "Substituir",
+        });
         if (!ok) return;
-        r = await exportarPacote(entrada, pastaMae, fmt, true);
+        r = await gerar(true);
       }
       setResultado(r);
       if (lembrarDestino && prefs.ultimoDestino !== pastaMae) {
@@ -128,7 +142,7 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
 
   const bloqueado = aCorrigir > 0;
   const podeExportar = noApp && !bloqueado && !!destino && !exportando;
-  const alvo = destino ? juntarCaminho(destino, formato === "zip" ? `${nome}.zip` : nome) : null;
+  const alvo = destino ? juntarCaminho(destino, formato === "zip" ? `${nome}.zip` : formato === "pdf" ? `${nome}.pdf` : nome) : null;
 
   const rodape = bloqueado ? (
     <button type="button" className="btn" onClick={aoFechar}>
@@ -210,6 +224,23 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
                 <span className="ajuda">Os arquivos soltos, para conferir ou guardar no repositório.</span>
               </span>
             </label>
+            <label className="exportar-opcao">
+              <input
+                type="radio"
+                name="formato-exportacao"
+                value="pdf"
+                checked={formato === "pdf"}
+                onChange={() => setFormato("pdf")}
+              />
+              <span>
+                <strong>PDF da leitura</strong>
+                <span className="ajuda">
+                  Para o aluno baixar e guardar como registro: anexe no Moodle ao lado do pacote. As atividades saem para
+                  marcar e escrever depois de imprimir, sem as respostas; o conteúdo dos “Confira” vai para o fim. O PDF é
+                  acessível (marcado para leitores de tela).
+                </span>
+              </span>
+            </label>
           </fieldset>
 
           <div className="campo">
@@ -256,15 +287,17 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
           )}
 
           <div className="exportar-status" role="status" aria-live="polite">
-            {exportando && <p>Exportando o pacote…</p>}
+            {exportando && <p>{formato === "pdf" ? "Gerando o PDF…" : "Exportando o pacote…"}</p>}
             {resultado && (
               <div className="exportar-resultado">
                 <p>
-                  <Icone nome="ok" /> <strong>Pacote exportado.</strong>
+                  <Icone nome="ok" /> <strong>{resultado.caminho.endsWith(".pdf") ? "PDF gerado." : "Pacote exportado."}</strong>
                 </p>
                 <p className="exportar-caminho">{resultado.caminho}</p>
                 <p>
-                  {resultado.arquivos} arquivos · {tamanhoLegivel(resultado.bytes)}
+                  {resultado.caminho.endsWith(".pdf")
+                    ? tamanhoLegivel(resultado.bytes)
+                    : `${resultado.arquivos} arquivos · ${tamanhoLegivel(resultado.bytes)}`}
                 </p>
                 <button
                   type="button"

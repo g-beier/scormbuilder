@@ -10,6 +10,11 @@ import type {
   ItemContraste,
   ItemLinha,
   Meta,
+  AlternativaRamificada,
+  ItemCategorizar,
+  PerguntaRamificada,
+  OpcaoEscolha,
+  OpcaoMultipla,
   Pergunta,
   Projeto,
   Slide,
@@ -131,6 +136,20 @@ class Leitor {
     this.desvio(k, v);
     return undefined;
   }
+  /** Número opcional; outro tipo vai para extras. */
+  nOpc(k: string): number | undefined {
+    const v = this.o[k];
+    if (v === undefined || (typeof v === "number" && Number.isFinite(v))) return v;
+    this.desvio(k, v);
+    return undefined;
+  }
+  /** Booleano opcional; outro tipo vai para extras. */
+  bOpc(k: string): boolean | undefined {
+    const v = this.o[k];
+    if (v === undefined || typeof v === "boolean") return v;
+    this.desvio(k, v);
+    return undefined;
+  }
   objs(k: string): Obj[] {
     const v = this.o[k];
     if (v === undefined) return [];
@@ -186,6 +205,38 @@ function lerPergunta(o: Obj, av: string[], onde: string): Pergunta {
   else if (c !== undefined) l.extras.correta = c;
   p.explica = l.s("explica");
   return comExtras(p, l.fim(["pergunta", "opcoes", "correta", "explica"]));
+}
+
+function lerOpcaoMultipla(o: Obj, av: string[], onde: string): OpcaoMultipla {
+  const l = new Leitor(o, av, onde);
+  const op: OpcaoMultipla = { texto: l.s("texto"), correta: l.bOpc("correta") ?? false, fb: l.s("fb") };
+  return comExtras(op, l.fim(["texto", "correta", "fb"]));
+}
+
+function lerItemCategorizar(o: Obj, av: string[], onde: string): ItemCategorizar {
+  const l = new Leitor(o, av, onde);
+  const c = l.nOpc("categoria");
+  const it: ItemCategorizar = { texto: l.s("texto"), categoria: c !== undefined && Number.isInteger(c) ? c : -1, fb: l.s("fb") };
+  return comExtras(it, l.fim(["texto", "categoria", "fb"]));
+}
+
+function lerPerguntaRamificada(o: Obj, av: string[], onde: string): PerguntaRamificada {
+  const l = new Leitor(o, av, onde);
+  const p: PerguntaRamificada = {
+    id: l.s("id") || novoId("q"),
+    enunciado: l.s("enunciado"),
+    alternativas: l.objs("alternativas").map((x, k) => {
+      const la = new Leitor(x, av, `${onde}, alternativa ${k + 1}`);
+      const a: AlternativaRamificada = { texto: la.s("texto"), retorno: la.s("retorno"), proxima: la.s("proxima") || "fim" };
+      return comExtras(a, la.fim(["texto", "retorno", "proxima"]));
+    }),
+  };
+  return comExtras(p, l.fim(["id", "enunciado", "alternativas"]));
+}
+
+function lerOpcaoEscolha(o: Obj, av: string[], onde: string): OpcaoEscolha {
+  const l = new Leitor(o, av, onde);
+  return comExtras({ texto: l.s("texto"), retorno: l.s("retorno") }, l.fim(["texto", "retorno"]));
 }
 
 function lerFluxo(o: Obj, av: string[], onde: string, id?: string): BlocoOrdenar {
@@ -320,6 +371,11 @@ const CAMPOS_BLOCO: Record<TipoBloco, readonly string[]> = {
   destaque: ["html"],
   confira: ["botao", "titulo", "paras"],
   fonte: ["html"],
+  multipla: ["enunciado", "opcoes", "msgAcerto", "msgRevisar"],
+  reflexao: ["pergunta", "aviso", "minChars", "maxChars", "opcional"],
+  escolha: ["pergunta", "opcoes"],
+  ramificado: ["perguntas"],
+  categorizar: ["enunciado", "categorias", "itens", "msgAcerto", "msgRevisar"],
 };
 
 function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
@@ -362,6 +418,64 @@ function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
     case "confira":
       b = { id, tipo, botao: l.t("botao"), titulo: l.t("titulo"), paras: l.arr("paras") };
       break;
+    case "multipla": {
+      const m: Bloco = {
+        id,
+        tipo,
+        enunciado: l.s("enunciado"),
+        opcoes: l.objs("opcoes").map((x, k) => lerOpcaoMultipla(x, av, `${onde}, alternativa ${k + 1}`)),
+      };
+      const msgAcerto = l.sOpc("msgAcerto");
+      const msgRevisar = l.sOpc("msgRevisar");
+      if (msgAcerto !== undefined) m.msgAcerto = msgAcerto;
+      if (msgRevisar !== undefined) m.msgRevisar = msgRevisar;
+      b = m;
+      break;
+    }
+    case "reflexao": {
+      const r: Bloco = { id, tipo, pergunta: l.s("pergunta") };
+      const aviso = l.sOpc("aviso");
+      const minChars = l.nOpc("minChars");
+      const maxChars = l.nOpc("maxChars");
+      const opcional = l.bOpc("opcional");
+      if (aviso !== undefined) r.aviso = aviso;
+      if (minChars !== undefined) r.minChars = minChars;
+      if (maxChars !== undefined) r.maxChars = maxChars;
+      if (opcional !== undefined) r.opcional = opcional;
+      b = r;
+      break;
+    }
+    case "escolha":
+      b = {
+        id,
+        tipo,
+        pergunta: l.s("pergunta"),
+        opcoes: l.objs("opcoes").map((x, k) => lerOpcaoEscolha(x, av, `${onde}, alternativa ${k + 1}`)),
+      };
+      break;
+    case "ramificado":
+      b = {
+        id,
+        tipo,
+        perguntas: l.objs("perguntas").map((x, k) => lerPerguntaRamificada(x, av, `${onde}, pergunta ${k + 1}`)),
+      };
+      break;
+    case "categorizar": {
+      const c: Bloco = {
+        id,
+        tipo,
+        enunciado: l.s("enunciado"),
+        // No data.js os títulos vêm escapados; no projeto são texto simples
+        categorias: l.arr("categorias").map(desescaparHtml),
+        itens: l.objs("itens").map((x, k) => lerItemCategorizar(x, av, `${onde}, item ${k + 1}`)),
+      };
+      const msgAcerto = l.sOpc("msgAcerto");
+      const msgRevisar = l.sOpc("msgRevisar");
+      if (msgAcerto !== undefined) c.msgAcerto = msgAcerto;
+      if (msgRevisar !== undefined) c.msgRevisar = msgRevisar;
+      b = c;
+      break;
+    }
   }
   return comExtras(b, l.fim(["id", "tipo", ...CAMPOS_BLOCO[tipo]]));
 }

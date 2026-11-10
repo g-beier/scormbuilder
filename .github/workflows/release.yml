@@ -1,0 +1,64 @@
+# Gera os instaladores (Mac Apple Silicon, Mac Intel e Windows) a cada tag v*
+# e anexa a um rascunho de Release no GitHub. Publique o rascunho depois de conferir.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  instaladores:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plataforma: macos-latest
+            args: --target aarch64-apple-darwin
+            alvo: aarch64-apple-darwin
+          - plataforma: macos-latest
+            args: --target x86_64-apple-darwin
+            alvo: x86_64-apple-darwin
+          - plataforma: windows-latest
+            args: ""
+            alvo: ""
+    runs-on: ${{ matrix.plataforma }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.alvo }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Dependências do front
+        run: npm ci
+
+      - name: Testes do front
+        run: npm test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "SCORM Builder ${{ github.ref_name }}"
+          releaseBody: |
+            Veja as novidades e as instruções de instalação no README.
+
+            **Mac:** baixe o `.dmg` do seu processador (Apple Silicon = `aarch64`, Intel = `x64`). O app ainda não é assinado pela Apple: na primeira vez, abra com clique direito → Abrir, ou em Ajustes do Sistema → Privacidade e Segurança → "Abrir Mesmo Assim".
+            **Windows:** baixe o instalador `.msi` ou `-setup.exe`. Se o SmartScreen avisar, clique em "Mais informações" → "Executar assim mesmo".
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

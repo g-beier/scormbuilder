@@ -10,6 +10,11 @@ import { FormQuiz } from "./FormQuiz";
 import { FormContraste } from "./FormContraste";
 import { FormDestaque, FormFonte } from "./FormDestaque";
 import { FormConfira } from "./FormConfira";
+import { FormMultipla } from "./FormMultipla";
+import { FormReflexao } from "./FormReflexao";
+import { FormEscolha } from "./FormEscolha";
+import { FormCategorizar } from "./FormCategorizar";
+import { FormRamificado } from "./FormRamificado";
 
 /** Form de cada tipo de bloco. */
 export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extract<Bloco, { tipo: T }>>> } = {
@@ -23,6 +28,11 @@ export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extra
   destaque: FormDestaque,
   confira: FormConfira,
   fonte: FormFonte,
+  multipla: FormMultipla,
+  reflexao: FormReflexao,
+  escolha: FormEscolha,
+  categorizar: FormCategorizar,
+  ramificado: FormRamificado,
 };
 
 /** Descrição curta de cada tipo, para o menu "Adicionar bloco". */
@@ -37,4 +47,9 @@ export const DESCRICOES_BLOCO: Record<TipoBloco, string> = {
   destaque: "Caixa colorida com a ideia principal.",
   confira: "Botão que abre uma janela com mais detalhes.",
   fonte: "Referência ou link para a fonte, em letra pequena.",
+  multipla: "Pergunta com uma ou mais alternativas certas, cada uma comentada.",
+  reflexao: "O aluno escreve uma resposta livre, sem nota.",
+  escolha: "Sem certo ou errado: cada alternativa mostra um retorno.",
+  categorizar: "O aluno arrasta cada item para a categoria certa e clica em Verificar.",
+  ramificado: "Uma pergunta por vez; cada resposta leva a outra pergunta. Sem nota.",
 };

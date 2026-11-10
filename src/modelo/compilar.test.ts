@@ -154,3 +154,149 @@ describe("escape de texto simples", () => {
     expect(desescaparHtml(escaparHtml("&amp; e &lt;"))).toBe("&amp; e &lt;");
   });
 });
+
+describe("compilar: tipos do M6 (multipla, reflexao, escolha)", () => {
+  const SUJO = 'A & B <c> "d"';
+
+  function projetoM6() {
+    const p = novoProjeto({ curso: "MAPIJ", ud: 4, atividade: "LEITURA", numero: 3, titulo: "T", contexto: "C" });
+    const s = novoSlide("conteudo");
+    s.titulo = "Tela";
+    const m = novoBloco("multipla");
+    m.enunciado = "Marque <strong>todas</strong>";
+    m.opcoes = [
+      { texto: "A", correta: true, fb: SUJO, extras: { x: 1 } },
+      { texto: "<em>B</em>", correta: false, fb: "Não." },
+    ];
+    m.msgAcerto = "";
+    m.msgRevisar = "  ";
+    const m2 = novoBloco("multipla");
+    m2.msgAcerto = SUJO;
+    m2.msgRevisar = "Revise.";
+    const r = novoBloco("reflexao");
+    r.pergunta = "P?";
+    Object.assign(r, { aviso: "", minChars: 10, maxChars: 500, opcional: true });
+    const r2 = novoBloco("reflexao");
+    Object.assign(r2, { pergunta: "Q?", aviso: SUJO, minChars: 20, maxChars: 1000, opcional: false });
+    const e = novoBloco("escolha");
+    e.pergunta = "E?";
+    e.opcoes = [
+      { texto: "Um", retorno: SUJO },
+      { texto: "Dois", retorno: "R2" },
+    ];
+    s.blocos = [m, m2, r, r2, e];
+    p.slides.splice(1, 0, s);
+    return p;
+  }
+
+  const blocos = (p: ReturnType<typeof projetoM6>) =>
+    (compilarConteudo(p).slides[1] as { blocos: Array<Record<string, unknown>> }).blocos;
+
+  it("omite opcionais vazios e iguais ao padrão, sem extras", () => {
+    const [m, m2, r, r2, e] = blocos(projetoM6());
+    expect(Object.keys(m)).toEqual(["id", "tipo", "enunciado", "opcoes"]);
+    expect(m.opcoes).toEqual([
+      { texto: "A", correta: true, fb: SUJO },
+      { texto: "<em>B</em>", correta: false, fb: "Não." },
+    ]);
+    expect(Object.keys(m2)).toEqual(["id", "tipo", "enunciado", "opcoes", "msgAcerto", "msgRevisar"]);
+    expect(r).toEqual({ id: r.id, tipo: "reflexao", pergunta: "P?" });
+    expect(r2).toEqual({ id: r2.id, tipo: "reflexao", pergunta: "Q?", aviso: SUJO, minChars: 20, maxChars: 1000, opcional: false });
+    expect(Object.keys(e)).toEqual(["id", "tipo", "pergunta", "opcoes"]);
+  });
+
+  it("não escapa os campos simples do M6 (o motor usa textContent)", () => {
+    const [m, m2, , r2, e] = blocos(projetoM6());
+    expect((m.opcoes as Array<{ fb: string }>)[0].fb).toBe(SUJO);
+    expect(m2.msgAcerto).toBe(SUJO);
+    expect(r2.aviso).toBe(SUJO);
+    expect((e.opcoes as Array<{ retorno: string }>)[0].retorno).toBe(SUJO);
+  });
+
+  it("é determinístico e a ida e volta pelo importador é idempotente", () => {
+    const p = projetoM6();
+    const js1 = compilarDataJs(p);
+    expect(compilarDataJs(structuredClone(p))).toBe(js1);
+    const { projeto: p2, avisos } = importarDataJs(js1);
+    expect(avisos).toEqual([]);
+    expect(compilarDataJs(p2)).toBe(js1);
+    const [m, , r, r2, e] = (p2.slides[1] as SlideConteudo).blocos;
+    expect(m).toEqual({ ...blocos(p)[0] });
+    expect(r).toEqual({ id: r.id, tipo: "reflexao", pergunta: "P?" });
+    expect(r2).toMatchObject({ minChars: 20, maxChars: 1000, opcional: false, aviso: SUJO });
+    expect(e).toMatchObject({ pergunta: "E?", opcoes: [{ texto: "Um", retorno: SUJO }, { texto: "Dois", retorno: "R2" }] });
+  });
+});
+
+describe("compilar: categorizar", () => {
+  const SUJO = 'A & B <c> "d"';
+
+  function projetoCat() {
+    const p = novoProjeto({ curso: "MAPIJ", ud: 4, atividade: "LEITURA", numero: 3, titulo: "T", contexto: "C" });
+    const s = novoSlide("conteudo");
+    s.titulo = "Tela";
+    const c = novoBloco("categorizar");
+    c.enunciado = "Classifique <strong>cada</strong> ação";
+    c.categorias = ["Pais & mães", "<Autoridades>"];
+    c.itens = [
+      { texto: "<em>Acolher</em>", categoria: 0, fb: SUJO, extras: { x: 1 } },
+      { texto: "Investigar", categoria: 1, fb: "" },
+    ];
+    c.msgAcerto = " ";
+    const c2 = novoBloco("categorizar");
+    c2.msgAcerto = SUJO;
+    c2.msgRevisar = "Revise.";
+    s.blocos = [c, c2];
+    p.slides.splice(1, 0, s);
+    return p;
+  }
+
+  const blocos = (p: ReturnType<typeof projetoCat>) =>
+    (compilarConteudo(p).slides[1] as { blocos: Array<Record<string, unknown>> }).blocos;
+
+  it("escapa os títulos das categorias, não os campos de textContent, e omite opcionais vazios", () => {
+    const [c, c2] = blocos(projetoCat());
+    expect(Object.keys(c)).toEqual(["id", "tipo", "enunciado", "categorias", "itens"]);
+    expect(c.categorias).toEqual(["Pais &amp; mães", "&lt;Autoridades&gt;"]);
+    expect(c.itens).toEqual([
+      { texto: "<em>Acolher</em>", categoria: 0, fb: SUJO },
+      { texto: "Investigar", categoria: 1, fb: "" },
+    ]);
+    expect(c2.msgAcerto).toBe(SUJO);
+    expect(c2.msgRevisar).toBe("Revise.");
+  });
+
+  it("ida e volta pelo importador é idempotente", () => {
+    const p = projetoCat();
+    const js1 = compilarDataJs(p);
+    const { projeto: p2, avisos } = importarDataJs(js1);
+    expect(avisos).toEqual([]);
+    expect(compilarDataJs(p2)).toBe(js1);
+    const [c] = (p2.slides[1] as SlideConteudo).blocos;
+    expect(c).toMatchObject({ categorias: ["Pais & mães", "<Autoridades>"], itens: [{ categoria: 0, fb: SUJO }, { categoria: 1 }] });
+  });
+});
+
+describe("compilar: ramificado", () => {
+  it("mantém ids e destinos; ida e volta pelo importador é idempotente", () => {
+    const p = novoProjeto({ curso: "CTGESTAO", ud: 11, atividade: "QUIZ", numero: 1, titulo: "T", contexto: "C" });
+    const s = novoSlide("conteudo");
+    s.titulo = "Tela";
+    const r = novoBloco("ramificado");
+    r.perguntas[0].enunciado = "Tem <strong>CNPJ</strong>?";
+    r.perguntas[0].alternativas[0] = { texto: "Sim", retorno: 'A & B <c>', proxima: "fim", extras: { x: 1 } };
+    r.perguntas[1].extras = { y: 2 };
+    s.blocos = [r];
+    p.slides.splice(1, 0, s);
+    const [c] = (compilarConteudo(p).slides[1] as { blocos: Array<Record<string, unknown>> }).blocos;
+    expect(Object.keys(c)).toEqual(["id", "tipo", "perguntas"]);
+    const ps = c.perguntas as Array<Record<string, unknown>>;
+    expect(Object.keys(ps[1])).toEqual(["id", "enunciado", "alternativas"]);
+    expect((ps[0].alternativas as unknown[])[0]).toEqual({ texto: "Sim", retorno: "A & B <c>", proxima: "fim" });
+    expect((ps[0].alternativas as Array<{ proxima: string }>)[1].proxima).toBe(r.perguntas[1].id);
+    const js1 = compilarDataJs(p);
+    const { projeto: p2, avisos } = importarDataJs(js1);
+    expect(avisos).toEqual([]);
+    expect(compilarDataJs(p2)).toBe(js1);
+  });
+});

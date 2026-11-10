@@ -418,13 +418,17 @@ var Motor = (function () {
       }
       // Setas dentro de um card arrastável movem o card, não trocam de tela
       if (e.target.closest && e.target.closest(".drag-list")) return;
+      // Setas em campos de formulário (texto, opções) ficam com o campo
+      if (e.target.closest && e.target.closest("input, textarea, select")) return;
+      // Dentro do questionário com caminhos, setas não saem da tela no meio das perguntas
+      if (e.target.closest && e.target.closest(".ramificado")) return;
       if (e.key === "ArrowRight" || e.key === "PageDown") show(current + 1);
       if (e.key === "ArrowLeft" || e.key === "PageUp") show(current - 1);
     });
 
     var tx = null;
     stage.addEventListener("touchstart", function (e) {
-      tx = e.target.closest && e.target.closest(".drag-list") ? null : e.changedTouches[0].clientX;
+      tx = e.target.closest && e.target.closest(".drag-list, .cat-item, .ramificado, textarea") ? null : e.changedTouches[0].clientX;
     }, { passive: true });
     stage.addEventListener("touchend", function (e) {
       if (tx === null) return;
@@ -805,6 +809,865 @@ var Motor = (function () {
     pendentes: function (b, ctx) { return ctx.ok ? 0 : 1; },
     estado: function (b, ctx) { return ctx.ok ? 1 : undefined; },
     restaurar: function (b, ctx, valor) { if (valor) ctx.ok = true; }
+  });
+
+  // =====================================================================
+  // Blocos do kit (M6): múltipla seleção, reflexão e escolha com retorno.
+  // Portados de ead-scorm/base/scorm-kit/js/kit.js (Kit.quiz, Kit.reflexao, Kit.escolha).
+  // Campos "html" vão por innerHTML; campos de texto puro (fb, retorno, aviso,
+  // msgAcerto, msgRevisar) vão por textContent.
+  // =====================================================================
+
+  function texto(tag, cls, t) {
+    var e = el(tag, cls);
+    e.textContent = t == null ? "" : String(t);
+    return e;
+  }
+
+  function botao(cls, rotulo) {
+    var bt = texto("button", cls, rotulo);
+    bt.type = "button";
+    return bt;
+  }
+
+  // Caixa com a pergunta/enunciado; devolve { box, id } (id do enunciado, para aria-labelledby)
+  function caixaPergunta(ctx, cls, html) {
+    var box = el("div", "bloco-q " + cls);
+    var id = "kq" + ctx.seq("kit");
+    var p = el("p", "bloco-perg", html || "");
+    p.id = id;
+    box.appendChild(p);
+    return { box: box, id: id };
+  }
+
+  // ---------- Múltipla seleção, com retorno por alternativa (Kit.quiz) ----------
+  var MSG_ACERTO = "Muito bem: sua resposta coincide com o esperado.";
+  var MSG_REVISAR = "Alguns pontos merecem revisão. Veja os comentários nas alternativas.";
+
+  function aplicarMultipla(b, ui, marcadas) {
+    var tudoCerto = true;
+    ui.ops.forEach(function (op, i) {
+      var o = (b.opcoes || [])[i] || {};
+      var correta = o.correta === true;
+      var marcado = marcadas.indexOf(i) >= 0;
+      var fbTxt = o.fb == null ? "" : String(o.fb);
+      op.inp.checked = marcado;
+      op.inp.disabled = true;
+      op.lab.classList.remove("ok", "erro");
+      op.lab.classList.add("travada");
+      op.fb.hidden = true;
+      if (marcado === correta) {
+        if (correta) {
+          op.lab.classList.add("ok");
+          op.fb.textContent = fbTxt;
+          op.fb.hidden = !fbTxt;
+        }
+      } else {
+        tudoCerto = false;
+        op.lab.classList.add("erro");
+        op.fb.textContent = (correta ? "Faltou marcar esta. " : "Errado. ") + fbTxt;
+        op.fb.hidden = false;
+      }
+    });
+    ui.res.innerHTML = "";
+    ui.res.appendChild(tudoCerto
+      ? texto("div", "resultado bom", b.msgAcerto || MSG_ACERTO)
+      : texto("div", "resultado parcial", b.msgRevisar || MSG_REVISAR));
+    ui.ver.hidden = true;
+    ui.ref.hidden = false;
+  }
+
+  bloco("multipla", {
+    aviso: "Verifique suas respostas para avançar.",
+    falta: ["pergunta de múltipla escolha ainda não verificada", "perguntas de múltipla escolha ainda não verificadas"],
+    ordemAviso: 4,
+    ordemFalta: 4,
+    render: function (b, ctx) {
+      ctx.marcadas = null;   // índices marcados na última verificação (null = nunca verificou)
+      var cx = caixaPergunta(ctx, "multipla", b.enunciado);
+      var grupo = el("div", "opcoes");
+      grupo.setAttribute("role", "group");
+      grupo.setAttribute("aria-labelledby", cx.id);
+      var ops = [];
+      (b.opcoes || []).forEach(function (o) {
+        var lab = el("label", "opcao");
+        var inp = el("input");
+        inp.type = "checkbox";
+        lab.appendChild(inp);
+        lab.appendChild(el("span", "opcao-txt", o.texto || ""));
+        var fb = el("span", "fb");
+        fb.hidden = true;
+        lab.appendChild(fb);
+        grupo.appendChild(lab);
+        ops.push({ lab: lab, inp: inp, fb: fb });
+      });
+      cx.box.appendChild(grupo);
+      var res = el("div", "quiz-resultado");
+      res.setAttribute("aria-live", "polite");
+      cx.box.appendChild(res);
+      var acoes = el("div", "acoes");
+      var ver = botao("btn-act", "Verificar respostas");
+      var ref = botao("btn-act sec", "Tentar de novo");
+      ref.hidden = true;
+      acoes.appendChild(ver);
+      acoes.appendChild(ref);
+      cx.box.appendChild(acoes);
+      ctx.ui = { ops: ops, res: res, ver: ver, ref: ref };
+
+      ver.addEventListener("click", function () {
+        var marcadas = [];
+        ops.forEach(function (op, i) { if (op.inp.checked) marcadas.push(i); });
+        if (!marcadas.length) {
+          res.innerHTML = "";
+          res.appendChild(texto("div", "resultado parcial", "Marque ao menos uma alternativa antes de verificar."));
+          return;
+        }
+        ctx.marcadas = marcadas;
+        aplicarMultipla(b, ctx.ui, marcadas);
+        ref.focus();
+        ctx.mudou();
+      });
+
+      ref.addEventListener("click", function () {
+        ops.forEach(function (op) {
+          op.inp.disabled = false;
+          op.lab.classList.remove("ok", "erro", "travada");
+          op.fb.hidden = true;
+        });
+        res.innerHTML = "";
+        ver.hidden = false;
+        ref.hidden = true;
+        ver.focus();
+      });
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (ctx.marcadas || !ctx.ui.ops.length) ? 0 : 1; },
+    estado: function (b, ctx) { return ctx.marcadas ? ctx.marcadas.slice() : undefined; },
+    restaurar: function (b, ctx, valor) {
+      if (!valor || !valor.length) return;
+      var n = ctx.ui.ops.length, m = [];
+      valor.forEach(function (v) { if (typeof v === "number" && v >= 0 && v < n && m.indexOf(v) < 0) m.push(v); });
+      if (!m.length) return;
+      ctx.marcadas = m;
+      aplicarMultipla(b, ctx.ui, m);
+    }
+  });
+
+  // ---------- Reflexão com envio ao LMS (Kit.reflexao) ----------
+  var AVISO_REFLEXAO = "Ao enviar, sua reflexão é registrada na plataforma e pode ser lida pela equipe do curso. Não escreva nomes nem dados que identifiquem crianças, famílias ou casos reais. Depois de enviada, ela não pode ser editada; se você sair desta tela sem enviar, o texto é descartado.";
+  var MSG_ENVIADA = "✓ Reflexão enviada. Obrigado por compartilhar.";
+
+  function limparTexto(t) { return String(t).replace(/\s+/g, " ").replace(/^ | $/g, ""); }
+
+  function mostrarEnviada(ui, manterTexto) {
+    ui.ta.readOnly = true;
+    ui.btn.hidden = true;
+    ui.cont.hidden = true;
+    if (ui.aviso) ui.aviso.hidden = true;
+    if (!manterTexto) { ui.rot.hidden = true; ui.ta.hidden = true; }
+    ui.status.innerHTML = "";
+    ui.status.appendChild(texto("p", "enviada", MSG_ENVIADA));
+  }
+
+  bloco("reflexao", {
+    aviso: "Envie sua reflexão para avançar.",
+    falta: ["reflexão ainda não enviada", "reflexões ainda não enviadas"],
+    ordemAviso: 6,
+    ordemFalta: 6,
+    render: function (b, ctx) {
+      ctx.ok = false;
+      var MIN = b.minChars > 0 ? b.minChars : 10;
+      var MAX = b.maxChars > 0 ? b.maxChars : 500;
+      var opcional = b.opcional !== false;
+      var cx = caixaPergunta(ctx, "reflexao", b.pergunta);
+      var n = cx.id;
+      var rot = texto("label", "nota refl-rotulo", "Escreva sua reflexão" + (opcional ? " (opcional)" : "") + ".");
+      rot.id = n + "r";
+      rot.setAttribute("for", n + "t");
+      var ta = el("textarea");
+      ta.id = n + "t";
+      ta.rows = 4;
+      ta.maxLength = MAX;
+      ta.setAttribute("aria-labelledby", cx.id + " " + rot.id);
+      var cont = texto("p", "nota refl-cont", "");
+      cont.id = n + "c";
+      var avisoTxt = b.aviso == null ? AVISO_REFLEXAO : String(b.aviso);
+      var aviso = null;
+      if (avisoTxt) {
+        aviso = texto("p", "nota aviso-refl", avisoTxt);
+        aviso.id = n + "a";
+      }
+      ta.setAttribute("aria-describedby", cont.id + (aviso ? " " + aviso.id : ""));
+      var acoes = el("div", "acoes");
+      var btn = botao("btn-act", "Enviar reflexão");
+      btn.disabled = true;
+      acoes.appendChild(btn);
+      var status = el("div", "refl-status");
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      status.tabIndex = -1;
+      [rot, ta, cont, aviso, acoes, status].forEach(function (x) { if (x) cx.box.appendChild(x); });
+      ctx.ui = { rot: rot, ta: ta, cont: cont, aviso: aviso, btn: btn, status: status };
+
+      function contar() {
+        var bruto = ta.value.length, util = limparTexto(ta.value).length;
+        cont.textContent = bruto + "/" + MAX + (util < MIN ? " · mínimo de " + MIN + " caracteres" : "");
+        btn.disabled = util < MIN;
+      }
+      contar();
+      ta.addEventListener("input", contar);
+
+      btn.addEventListener("click", function () {
+        if (ctx.ok || limparTexto(ta.value).length < MIN) return;
+        var gravou = false;
+        try { gravou = window.Scorm.gravarResposta(b.id, ta.value); } catch (e) { gravou = false; }
+        if (!gravou) {
+          status.innerHTML = "";
+          status.appendChild(texto("div", "resultado parcial", "Não foi possível enviar agora. Seu texto continua na tela: tente novamente."));
+          return;
+        }
+        ctx.ok = true;
+        mostrarEnviada(ctx.ui, true);
+        status.focus();
+        ctx.mudou();
+      });
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (b.opcional === false && !ctx.ok) ? 1 : 0; },
+    estado: function (b, ctx) { return ctx.ok ? 1 : undefined; },
+    restaurar: function (b, ctx, valor) {
+      if (!valor) return;
+      ctx.ok = true;
+      mostrarEnviada(ctx.ui, false);
+    }
+  });
+
+  // ---------- Escolha com retorno, sem gabarito (Kit.escolha) ----------
+  function aplicarEscolha(b, ui, i) {
+    ui.ops.forEach(function (op, k) {
+      op.inp.checked = (k === i);
+      op.lab.classList.toggle("escolhida", k === i);
+    });
+    var o = (b.opcoes || [])[i];
+    ui.ret.innerHTML = "";
+    if (o) {
+      var card = el("div", "card pergunta");
+      card.appendChild(texto("h3", null, "Retorno"));
+      card.appendChild(texto("p", null, o.retorno));
+      ui.ret.appendChild(card);
+    } else {
+      ui.ret.appendChild(texto("p", "nota", "Escolha uma alternativa para ver o retorno."));
+    }
+  }
+
+  bloco("escolha", {
+    aviso: "Escolha uma alternativa para avançar.",
+    falta: ["escolha ainda não feita", "escolhas ainda não feitas"],
+    ordemAviso: 5,
+    ordemFalta: 5,
+    render: function (b, ctx) {
+      ctx.escolha = null;
+      var cx = caixaPergunta(ctx, "escolha", b.pergunta);
+      var grupo = el("div", "opcoes");
+      grupo.setAttribute("role", "radiogroup");
+      grupo.setAttribute("aria-labelledby", cx.id);
+      var ops = [];
+      (b.opcoes || []).forEach(function (o, i) {
+        var lab = el("label", "opcao");
+        var inp = el("input");
+        inp.type = "radio";
+        inp.name = cx.id;
+        inp.value = String(i);
+        lab.appendChild(inp);
+        lab.appendChild(el("span", "opcao-txt", o.texto || ""));
+        grupo.appendChild(lab);
+        ops.push({ lab: lab, inp: inp });
+        inp.addEventListener("change", function () {
+          if (!inp.checked) return;
+          ctx.escolha = i;
+          aplicarEscolha(b, ctx.ui, i);
+          ctx.mudou();
+        });
+      });
+      cx.box.appendChild(grupo);
+      var ret = el("div", "escolha-retorno");
+      ret.setAttribute("aria-live", "polite");
+      cx.box.appendChild(ret);
+      ctx.ui = { ops: ops, ret: ret };
+      aplicarEscolha(b, ctx.ui, -1);
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (ctx.escolha == null && ctx.ui.ops.length) ? 1 : 0; },
+    estado: function (b, ctx) { return ctx.escolha == null ? undefined : ctx.escolha; },
+    restaurar: function (b, ctx, valor) {
+      if (typeof valor !== "number" || !ctx.ui.ops[valor]) return;
+      ctx.escolha = valor;
+      aplicarEscolha(b, ctx.ui, valor);
+    }
+  });
+
+  // =====================================================================
+  // Classificar em categorias (M6). Novo, sem equivalente no kit.
+  // Três formas de mover um item: arrastar com o ponteiro; tocar no item e depois na
+  // categoria; ou Tab até o item, Enter/Espaço, Tab até a categoria e Enter.
+  // Estado = categoria de cada item (na ordem do data.js) na última verificação.
+  // =====================================================================
+
+  // Coloca cada item no seu recipiente (bandeja = -1), na ordem embaralhada da instância
+  function distribuirCat(ui, pos) {
+    ui.ordem.forEach(function (i) {
+      var c = pos[i];
+      var alvo = c >= 0 && ui.zonas[c] ? ui.zonas[c].lista : ui.bandeja;
+      alvo.appendChild(ui.itens[i].li);
+    });
+    ui.bandejaBox.classList.toggle("vazia", pos.every(function (c) { return c >= 0; }));
+  }
+
+  function limparMarcasCat(ui) {
+    ui.itens.forEach(function (it) {
+      it.bt.classList.remove("ok", "erro");
+      it.bt.removeAttribute("aria-disabled");
+      it.bt.removeAttribute("aria-describedby");
+      it.fb.hidden = true;
+      it.fb.textContent = "";
+    });
+    ui.bandejaBox.hidden = false;
+  }
+
+  function aplicarCategorizar(b, ui, pos) {
+    var certos = 0;
+    distribuirCat(ui, pos);
+    ui.itens.forEach(function (it, i) {
+      var o = (b.itens || [])[i] || {};
+      var fbTxt = o.fb == null ? "" : String(o.fb);
+      var ok = pos[i] === o.categoria;
+      var certa = ui.zonas[o.categoria] ? (ui.zonas[o.categoria].titulo.textContent || "").trim() : "";
+      // Travado, mas focável (aria-disabled): o retorno continua acessível pelo Tab
+      it.bt.setAttribute("aria-disabled", "true");
+      it.bt.setAttribute("aria-pressed", "false");
+      it.bt.classList.remove("ok", "erro", "sel");
+      it.bt.classList.add(ok ? "ok" : "erro");
+      // Certo/errado também em texto, não só pela cor
+      it.fb.textContent = ((ok ? "Certo." : "Errado." + (certa ? " O lugar dele é “" + certa + "”." : "")) + " " + fbTxt).replace(/ $/, "");
+      it.fb.hidden = false;
+      it.bt.setAttribute("aria-describedby", it.fb.id);
+      if (ok) certos++;
+    });
+    ui.zonas.forEach(function (z) { z.alvo.disabled = true; });
+    ui.bandejaBox.hidden = true;   // tudo colocado e travado: a dica de "trocar de lugar" não vale
+    ui.res.innerHTML = "";
+    var n = ui.itens.length;
+    ui.res.appendChild(certos === n
+      ? texto("div", "resultado bom", b.msgAcerto || "Muito bem: todos os itens estão na categoria certa.")
+      : texto("div", "resultado parcial", (b.msgRevisar || "Alguns itens merecem revisão. Veja o comentário de cada item.") +
+          " (" + certos + " de " + n + " no lugar certo.)"));
+    ui.ver.hidden = true;
+    ui.ref.hidden = false;
+  }
+
+  bloco("categorizar", {
+    aviso: "Classifique os itens e verifique para avançar.",
+    falta: ["atividade de classificar ainda não verificada", "atividades de classificar ainda não verificadas"],
+    ordemAviso: 7,
+    ordemFalta: 7,
+    render: function (b, ctx) {
+      var cats = b.categorias || [];
+      var itensB = b.itens || [];
+      ctx.resp = null;     // categorias na última verificação (null = nunca verificou)
+      ctx.pos = itensB.map(function () { return -1; });
+      ctx.sel = null;
+
+      var cx = caixaPergunta(ctx, "categorizar", b.enunciado);
+      cx.box.appendChild(texto("p", "flow-help",
+        "Arraste cada item para a categoria certa, ou toque no item e depois na categoria. No teclado: Enter no item e depois Enter na categoria."));
+
+      var status = el("p", "sr-only");
+      status.setAttribute("aria-live", "polite");
+
+      var bandejaBox = el("div", "cat-bandeja");
+      var bandejaRot = texto("p", "cat-bandeja-rot", "Itens para classificar");
+      bandejaRot.id = cx.id + "-b";
+      bandejaBox.appendChild(bandejaRot);
+      var bandeja = el("ul", "cat-lista");
+      bandeja.setAttribute("aria-labelledby", bandejaRot.id);
+      bandejaBox.appendChild(bandeja);
+      var tudoFeito = texto("p", "cat-bandeja-ok", "Todos os itens já estão numa categoria. Para trocar um item de lugar, selecione-o e escolha outra categoria.");
+      bandejaBox.appendChild(tudoFeito);
+      cx.box.appendChild(bandejaBox);
+
+      var grade = el("div", "cat-zonas" + (cats.length === 3 ? " tres" : ""));
+      var zonas = cats.map(function (titulo, c) {
+        var z = el("div", "cat-zona c-" + CORES[c % CORES.length]);
+        z.setAttribute("data-cat", c);
+        var alvo = el("button", "cat-alvo");
+        alvo.type = "button";
+        var tit = el("span", "cat-titulo", titulo || "");
+        tit.id = cx.id + "-c" + c;
+        alvo.appendChild(tit);
+        alvo.appendChild(texto("span", "cat-dica", "Colocar aqui o item selecionado"));
+        alvo.disabled = true;
+        z.appendChild(alvo);
+        var ul = el("ul", "cat-lista");
+        ul.setAttribute("aria-labelledby", tit.id);
+        z.appendChild(ul);
+        grade.appendChild(z);
+        return { el: z, alvo: alvo, lista: ul, titulo: tit };
+      });
+      cx.box.appendChild(grade);
+
+      var itens = itensB.map(function (o, i) {
+        var li = el("li", "cat-item-li");
+        var bt = el("button", "cat-item", o.texto || "");
+        bt.type = "button";
+        bt.setAttribute("aria-pressed", "false");
+        bt.setAttribute("data-item", i);
+        var fb = el("span", "fb");
+        fb.id = cx.id + "-f" + i;
+        fb.hidden = true;
+        li.appendChild(bt);
+        li.appendChild(fb);
+        return { li: li, bt: bt, fb: fb };
+      });
+
+      var res = el("div", "quiz-resultado");
+      res.setAttribute("aria-live", "polite");
+      cx.box.appendChild(res);
+      var acoes = el("div", "acoes");
+      var ver = botao("btn-act", "Verificar");
+      var ref = botao("btn-act sec", "Tentar de novo");
+      ref.hidden = true;
+      acoes.appendChild(ver);
+      acoes.appendChild(ref);
+      cx.box.appendChild(acoes);
+      cx.box.appendChild(status);
+
+      var ui = ctx.ui = { itens: itens, zonas: zonas, bandeja: bandeja, bandejaBox: bandejaBox, res: res, ver: ver, ref: ref,
+                          ordem: embaralhar(itens.length) };
+      distribuirCat(ui, ctx.pos);
+
+      function nomeItem(i) { return (itens[i].bt.textContent || "").trim(); }
+      function nomeCat(c) { return (zonas[c].titulo.textContent || "").trim(); }
+      function travado(bt) { return bt.getAttribute("aria-disabled") === "true"; }
+      // Limpa antes de escrever, para que leitores de tela repitam uma frase igual à anterior
+      var anuncioT = 0;
+      function anunciar(t) {
+        status.textContent = "";
+        clearTimeout(anuncioT);
+        anuncioT = setTimeout(function () { status.textContent = t; }, 60);
+      }
+
+      function selecionar(i) {
+        ctx.sel = i;
+        itens.forEach(function (it, k) {
+          it.bt.classList.toggle("sel", k === i);
+          it.bt.setAttribute("aria-pressed", k === i ? "true" : "false");
+          // Com um item selecionado, o Tab vai direto de uma categoria para a outra
+          it.bt.tabIndex = (i != null && k !== i) ? -1 : 0;
+        });
+        zonas.forEach(function (z) { z.alvo.disabled = i == null; });
+        grade.classList.toggle("escolhendo", i != null);
+        if (i != null) anunciar("“" + nomeItem(i) + "” selecionado. Escolha a categoria.");
+      }
+
+      // Depois de mover, o foco fica no item (já na nova lista); o anúncio diz onde ele foi parar
+      function mover(i, c) {
+        ctx.pos[i] = c;
+        res.innerHTML = "";
+        distribuirCat(ui, ctx.pos);
+        selecionar(null);
+        anunciar("“" + nomeItem(i) + "” colocado em “" + nomeCat(c) + "”.");
+        itens[i].bt.focus();
+      }
+
+      var aposArrastar = false;
+      itens.forEach(function (it, i) {
+        it.bt.addEventListener("click", function (e) {
+          if (aposArrastar) { aposArrastar = false; return; }
+          if (travado(it.bt)) return;
+          var nova = ctx.sel === i ? null : i;
+          selecionar(nova);
+          // Pelo teclado (Enter/Espaço), o foco já vai para a primeira categoria
+          if (nova != null && e.detail === 0 && zonas[0]) zonas[0].alvo.focus();
+        });
+      });
+
+      zonas.forEach(function (z, c) {
+        z.alvo.addEventListener("click", function () {
+          if (ctx.sel == null) return;
+          mover(ctx.sel, c);
+        });
+      });
+
+      cx.box.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && ctx.sel != null) {
+          var i = ctx.sel;
+          selecionar(null);
+          anunciar("Seleção cancelada.");
+          itens[i].bt.focus();
+        }
+      });
+
+      // Arrastar com o ponteiro (mouse, toque, caneta). Perto da borda de cima ou de baixo
+      // da área de conteúdo, a tela rola sozinha (no celular as categorias ficam empilhadas).
+      var drag = null;
+      var palco = document.getElementById("stage");
+      function zonaEm(x, y, bt) {
+        bt.style.visibility = "hidden";
+        var alvo = document.elementFromPoint(x, y);
+        bt.style.visibility = "";
+        return alvo && alvo.closest ? alvo.closest(".cat-zona") : null;
+      }
+      function acompanhar() {
+        var d = drag;
+        d.bt.style.transform = "translate(" + (d.cx - d.x) + "px," + (d.cy - d.y + palco.scrollTop - d.top0) + "px)";
+        var z = zonaEm(d.cx, d.cy, d.bt);
+        zonas.forEach(function (zz) { zz.el.classList.toggle("sobre", zz.el === z); });
+      }
+      function rolarSozinho() {
+        if (!drag || !drag.ativo) return;
+        var r = palco.getBoundingClientRect(), borda = 48, v = 0;
+        if (drag.cy > r.bottom - borda) v = Math.min(16, (drag.cy - (r.bottom - borda)) / 3 + 2);
+        else if (drag.cy < r.top + borda) v = -Math.min(16, ((r.top + borda) - drag.cy) / 3 + 2);
+        if (v) {
+          var antes = palco.scrollTop;
+          palco.scrollTop = antes + v;
+          if (palco.scrollTop !== antes) acompanhar();
+        }
+        drag.raf = window.requestAnimationFrame(rolarSozinho);
+      }
+      grade.parentNode.addEventListener("pointerdown", function (e) {
+        var bt = e.target.closest && e.target.closest(".cat-item");
+        if (!bt || travado(bt) || e.button > 0) return;
+        document.addEventListener("pointermove", aoMover);
+        document.addEventListener("pointerup", soltar);
+        document.addEventListener("pointercancel", soltar);
+        drag = { bt: bt, i: Number(bt.getAttribute("data-item")), x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY,
+                 top0: palco.scrollTop, ativo: false, id: e.pointerId, raf: 0 };
+      });
+      function aoMover(e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag.cx = e.clientX;
+        drag.cy = e.clientY;
+        if (!drag.ativo) {
+          if (Math.abs(drag.cx - drag.x) + Math.abs(drag.cy - drag.y) < 8) return;
+          drag.ativo = true;
+          drag.bt.classList.add("arrastando");
+          grade.classList.add("escolhendo");
+          try { drag.bt.setPointerCapture(e.pointerId); } catch (er) { /* sem captura */ }
+          drag.raf = window.requestAnimationFrame(rolarSozinho);
+        }
+        e.preventDefault();
+        acompanhar();
+      }
+      function soltar(e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        var d = drag;
+        drag = null;
+        document.removeEventListener("pointermove", aoMover);
+        document.removeEventListener("pointerup", soltar);
+        document.removeEventListener("pointercancel", soltar);
+        if (!d.ativo) return;
+        window.cancelAnimationFrame(d.raf);
+        aposArrastar = true;
+        setTimeout(function () { aposArrastar = false; }, 0);
+        var z = e.type === "pointerup" ? zonaEm(e.clientX, e.clientY, d.bt) : null;
+        d.bt.classList.remove("arrastando");
+        d.bt.style.transform = "";
+        zonas.forEach(function (zz) { zz.el.classList.remove("sobre"); });
+        grade.classList.toggle("escolhendo", ctx.sel != null);
+        if (z) mover(d.i, Number(z.getAttribute("data-cat")));
+      }
+
+      ver.addEventListener("click", function () {
+        var faltam = ctx.pos.filter(function (c) { return c < 0; }).length;
+        if (faltam) {
+          res.innerHTML = "";
+          res.appendChild(texto("div", "resultado parcial",
+            faltam === 1 ? "Falta colocar 1 item numa categoria antes de verificar." : "Faltam " + faltam + " itens para colocar numa categoria antes de verificar."));
+          return;
+        }
+        selecionar(null);
+        ctx.resp = ctx.pos.slice();
+        aplicarCategorizar(b, ui, ctx.resp);
+        ref.focus();
+        ctx.mudou();
+      });
+
+      ref.addEventListener("click", function () {
+        limparMarcasCat(ui);
+        res.innerHTML = "";
+        ver.hidden = false;
+        ref.hidden = true;
+        selecionar(null);
+        ver.focus();
+      });
+
+      return cx.box;
+    },
+    pendentes: function (b, ctx) { return (ctx.resp || !ctx.ui.itens.length) ? 0 : 1; },
+    estado: function (b, ctx) { return ctx.resp ? ctx.resp.slice() : undefined; },
+    restaurar: function (b, ctx, valor) {
+      var n = ctx.ui.itens.length, m = ctx.ui.zonas.length;
+      if (!valor || valor.length !== n || !n) return;
+      for (var i = 0; i < n; i++) {
+        if (typeof valor[i] !== "number" || valor[i] < 0 || valor[i] >= m) return;
+      }
+      ctx.resp = valor.slice();
+      ctx.pos = valor.slice();
+      aplicarCategorizar(b, ctx.ui, ctx.resp);
+    }
+  });
+
+  // =====================================================================
+  // Questionário com caminhos (M6). Modelo: ead-scorm/CTGESTAO_UD11_QUIZ (app.js).
+  // Uma pergunta por vez, sem nota; cada alternativa tem retorno (textContent) e
+  // "proxima" (id de outra pergunta do bloco, ou "fim"). No fim, resumo do caminho
+  // e "Registrar respostas" (Scorm.gravarResposta, uma interação por pergunta).
+  // Estado: {"r":[alternativa de cada pergunta, -1 = sem resposta],"e":1 se registrado}.
+  // =====================================================================
+
+  function textoPuro(html) {
+    var d = document.createElement("div");
+    d.innerHTML = html == null ? "" : String(html);
+    return (d.textContent || "").replace(/\s+/g, " ").replace(/^ | $/g, "");
+  }
+
+  bloco("ramificado", {
+    aviso: "Responda o questionário até o fim e registre as respostas para avançar.",
+    falta: ["questionário ainda não registrado", "questionários ainda não registrados"],
+    ordemAviso: 8,
+    ordemFalta: 8,
+    render: function (b, ctx) {
+      var P = b.perguntas || [];
+      var N = P.length;
+      var idx = {};
+      P.forEach(function (p, k) { if (p && p.id != null) idx[p.id] = k; });
+      ctx.r = P.map(function () { return -1; });
+      ctx.e = false;
+      ctx.hist = [];
+      ctx.vista = 0;   // índice da pergunta à mostra, ou "fim"
+
+      var box = el("div", "bloco-q ramificado");
+      var base = "kr" + ctx.seq("ram");
+
+      function alt(k) { var p = P[k]; return p && ctx.r[k] >= 0 ? (p.alternativas || [])[ctx.r[k]] : null; }
+      function destino(k) {
+        var a = alt(k);
+        if (!a) return null;
+        if (a.proxima === "fim" || !idx.hasOwnProperty(a.proxima) || idx[a.proxima] === k) return "fim";
+        return idx[a.proxima];
+      }
+      // Perguntas do caminho a partir da 1; para na primeira sem resposta
+      function caminho() {
+        var seq = [], k = 0, vistos = {};
+        while (k !== "fim" && k != null && k < N && !vistos[k]) {
+          vistos[k] = true;
+          seq.push(k);
+          k = destino(k);
+        }
+        return seq;
+      }
+      ctx.caminho = caminho;
+      function completo() { var c = caminho(); return c.length > 0 && destino(c[c.length - 1]) === "fim"; }
+
+      // ---------- telas das perguntas ----------
+      var telas = P.map(function (p, k) {
+        var sec = el("div", "ram-pergunta");
+        sec.hidden = true;
+        // O número fica dentro do enunciado focado: o leitor de tela anuncia "Pergunta n" junto
+        var perg = el("p", "bloco-perg");
+        perg.appendChild(texto("span", "ram-num", "Pergunta " + (k + 1)));
+        perg.appendChild(el("span", "ram-enun", p.enunciado || ""));
+        perg.id = base + "p" + k;
+        perg.tabIndex = -1;
+        sec.appendChild(perg);
+        var grupo = el("div", "opcoes");
+        grupo.setAttribute("role", "radiogroup");
+        grupo.setAttribute("aria-labelledby", perg.id);
+        var ops = (p.alternativas || []).map(function (a, j) {
+          var lab = el("label", "opcao");
+          var inp = el("input");
+          inp.type = "radio";
+          inp.name = base + "q" + k;
+          inp.value = String(j);
+          lab.appendChild(inp);
+          lab.appendChild(el("span", "opcao-txt", a.texto || ""));
+          grupo.appendChild(lab);
+          inp.addEventListener("change", function () {
+            if (!inp.checked || ctx.e) return;
+            ctx.r[k] = j;
+            atualizarPergunta(k);
+            ctx.mudou();
+          });
+          return { lab: lab, inp: inp };
+        });
+        sec.appendChild(grupo);
+        var ret = el("div", "escolha-retorno");
+        ret.setAttribute("aria-live", "polite");
+        sec.appendChild(ret);
+        var acoes = el("div", "acoes ram-nav");
+        var volta = botao("btn-act sec", "Voltar");
+        var prox = botao("btn-act", "Próxima pergunta");
+        acoes.appendChild(volta);
+        acoes.appendChild(prox);
+        sec.appendChild(acoes);
+        volta.addEventListener("click", function () { mostrar(ctx.hist.length ? ctx.hist.pop() : 0, true); });
+        prox.addEventListener("click", function () {
+          var d = destino(k);
+          if (d == null) return;
+          ctx.hist.push(k);
+          mostrar(d, true);
+        });
+        box.appendChild(sec);
+        return { sec: sec, perg: perg, ops: ops, ret: ret, volta: volta, prox: prox };
+      });
+
+      function atualizarPergunta(k) {
+        var t = telas[k], a = alt(k);
+        t.ops.forEach(function (op, j) {
+          op.inp.checked = (j === ctx.r[k]);
+          op.inp.disabled = ctx.e;
+          op.lab.classList.toggle("escolhida", j === ctx.r[k]);
+          op.lab.classList.toggle("travada", ctx.e);
+        });
+        t.ret.innerHTML = "";
+        if (a && a.retorno) {
+          var card = el("div", "card pergunta");
+          card.appendChild(texto("p", "card-tit", "Retorno"));   // não é título: fica numa região aria-live
+          card.appendChild(texto("p", null, a.retorno));
+          t.ret.appendChild(card);
+        } else if (!a) {
+          t.ret.appendChild(texto("p", "nota", "Escolha uma alternativa para continuar."));
+        }
+        var d = destino(k);
+        t.prox.disabled = d == null;
+        t.prox.textContent = d === "fim" ? "Ver resumo" : "Próxima pergunta";
+      }
+
+      // ---------- resumo ----------
+      var fim = el("div", "ram-fim");
+      fim.hidden = true;
+      var fimTit = texto("h3", "ram-fim-tit", "Resumo das suas respostas");
+      fimTit.tabIndex = -1;
+      fim.appendChild(fimTit);
+      var lista = el("ol", "ram-resumo");
+      fim.appendChild(lista);
+      var fimNota = texto("p", "nota", "Confira as respostas. Ao registrar, elas são enviadas à plataforma e não podem mais ser alteradas. O questionário não tem nota.");
+      fim.appendChild(fimNota);
+      var fimAcoes = el("div", "acoes");
+      var reg = botao("btn-act", "Registrar respostas");
+      var rev = botao("btn-act sec", "Revisar desde a pergunta 1");
+      fimAcoes.appendChild(reg);
+      fimAcoes.appendChild(rev);
+      fim.appendChild(fimAcoes);
+      var status = el("div", "refl-status");
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      status.tabIndex = -1;
+      fim.appendChild(status);
+      box.appendChild(fim);
+
+      function desenharFim() {
+        lista.innerHTML = "";
+        caminho().forEach(function (k) {
+          var li = el("li");
+          li.setAttribute("value", k + 1);
+          li.appendChild(el("span", "ram-resumo-p", P[k].enunciado || ""));
+          var a = alt(k);
+          var resp = el("strong", "ram-resumo-r", a ? (a.texto || "") : "");
+          if (!a) resp.textContent = "Não respondida";
+          li.appendChild(resp);
+          lista.appendChild(li);
+        });
+        reg.hidden = ctx.e;
+        rev.hidden = ctx.e;
+        fimNota.hidden = ctx.e;
+        reg.disabled = !completo();
+        if (ctx.e) {
+          status.innerHTML = "";
+          status.appendChild(texto("p", "enviada", "✓ Respostas registradas. Obrigado."));
+        }
+      }
+
+      reg.addEventListener("click", function () {
+        if (ctx.e || !completo()) return;
+        var ok = true;
+        caminho().forEach(function (k) {
+          var g = false;
+          var txt = "Pergunta " + (k + 1) + ": " + textoPuro(P[k].enunciado) + " → " + textoPuro(alt(k).texto);
+          try { g = window.Scorm.gravarResposta(b.id + "-P" + (k + 1), txt); } catch (er) { g = false; }
+          ok = g && ok;
+        });
+        if (!ok) {
+          status.innerHTML = "";
+          status.appendChild(texto("div", "resultado parcial", "Não foi possível registrar agora. Suas respostas continuam na tela: tente novamente."));
+          status.focus();
+          return;
+        }
+        ctx.e = true;
+        P.forEach(function (p, k) { atualizarPergunta(k); });
+        desenharFim();
+        status.focus();
+        ctx.mudou();
+      });
+      rev.addEventListener("click", function () { ctx.hist = []; mostrar(0, true); });
+
+      function mostrar(v, focar) {
+        ctx.vista = v;
+        telas.forEach(function (t, k) {
+          t.sec.hidden = (k !== v);
+          t.volta.hidden = ctx.hist.length === 0;
+        });
+        fim.hidden = (v !== "fim");
+        if (v === "fim") {
+          desenharFim();
+          if (focar) fimTit.focus();
+        } else if (telas[v]) {
+          atualizarPergunta(v);
+          if (focar) telas[v].perg.focus();
+        }
+      }
+      ctx.mostrar = mostrar;
+      ctx.atualizarPergunta = atualizarPergunta;
+
+      if (!N) return box;
+      mostrar(0, false);
+      return box;
+    },
+    pendentes: function (b, ctx) { return (!ctx.e && (b.perguntas || []).length) ? 1 : 0; },
+    estado: function (b, ctx) {
+      if (!ctx.r || !ctx.r.some(function (v) { return v >= 0; })) return undefined;
+      var o = { r: ctx.r.slice() };
+      if (ctx.e) o.e = 1;
+      return o;
+    },
+    restaurar: function (b, ctx, valor) {
+      var P = b.perguntas || [];
+      if (!valor || !valor.r || valor.r.length !== P.length) return;
+      for (var k = 0; k < P.length; k++) {
+        var v = valor.r[k];
+        if (typeof v !== "number" || v < -1 || v >= (P[k].alternativas || []).length || v !== Math.floor(v)) return;
+      }
+      ctx.r = valor.r.slice();
+      var c = ctx.caminho();
+      if (valor.e === 1) {
+        var ultimo = c[c.length - 1];
+        var a = ultimo != null && ctx.r[ultimo] >= 0 ? P[ultimo].alternativas[ctx.r[ultimo]] : null;
+        // Só aceita "registrado" com o caminho completo
+        ctx.e = !!a;
+      }
+      P.forEach(function (p, k) { ctx.atualizarPergunta(k); });
+      // Volta para a primeira pergunta sem resposta do caminho, ou para o resumo
+      var pend = -1;
+      for (var i = 0; i < c.length; i++) if (ctx.r[c[i]] < 0) { pend = i; break; }
+      if (ctx.e || pend < 0) {
+        ctx.hist = c.slice();
+        ctx.mostrar("fim", false);
+      } else {
+        ctx.hist = c.slice(0, pend);
+        ctx.mostrar(c[pend], false);
+      }
+    }
   });
 
   return {
