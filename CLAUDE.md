@@ -25,7 +25,8 @@ cd src-tauri && cargo clippy -- -D warnings
 # runtime: converte os 18 LEITURA2 do ead-scorm, compara com o original (Playwright) e testa bloqueio/conclusão/retomada
 node runtime/test/montar.mjs "$TMPDIR"cev-m0 && node runtime/test/comparar.mjs "$TMPDIR"cev-m0
 node runtime/test/tipos-kit.mjs "$TMPDIR"cev-m6 && node runtime/test/categorizar.mjs "$TMPDIR"cev-m6 && node runtime/test/ramificado.mjs "$TMPDIR"cev-m6   # tipos do M6
-node runtime/test/impressao.mjs "$TMPDIR"cev-m7 "$TMPDIR"cev-m0   # PDF da leitura (M7)
+# PDF da leitura (M7): gera os .typ das fixtures e dos LEITURA2 e compila com validação PDF/UA-1
+PDF_SAIDA="$TMPDIR"cev-typst npx vitest run src/modelo/pdf.test.ts && (cd src-tauri && PDF_SAIDA="$TMPDIR"cev-typst cargo test --lib compila_fixtures -- --ignored)
 ```
 
 O teste de ouro em `src/modelo/importar.test.ts` lê `~/Dev/ead-scorm/*_LEITURA2/js/data.js`. Se a pasta não existir, ele é pulado.
@@ -38,6 +39,7 @@ runtime/        motor que vai DENTRO de cada pacote: ES5, sem build, offline (in
 src/modelo/     TS puro: tipos do Projeto, fábrica, validar (mensagens pt-BR), compilar (Projeto → data.js v2), importar (data.js legado/v2 → Projeto)
 src/servicos/   wrappers de invoke() (rascunhos.ts) e autosave com debounce (autosave.ts)
 src/estado/, src/telas/, src/editor/, src/previa/   UI (store zustand+immer+zundo, Início, Editor, prévia)
+src/modelo/pdf.ts   PDF da leitura (M7): data.js v2 → documento Typst (texto sempre como string literal; sem gabarito; capa = cabeçalho; sem tela de fim; Confira no anexo)
 src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.json e arquivos .cevscorm), lib.rs (registro)
 ```
 
@@ -47,6 +49,10 @@ src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.js
 ### Projeto (`.cevscorm` / rascunho) ≠ `data.js`
 
 O projeto (`src/modelo/tipos.ts`) é `{ formato: "cev-scorm-builder", versao: 1, id (uuid), meta: { curso, ud, atividade, numero, titulo, contexto }, slides, criadoEm, atualizadoEm, extras? }`. Slides e blocos têm ids curtos estáveis (`s-xxxxxxxx`, `b-xxxxxxxx`). Campos desconhecidos vindos de importação ficam em `extras` e nunca são descartados, mas também não vão para o pacote. `compilarDataJs` é determinístico. O nome do pacote vem de `nomePacote(meta)` = `CURSO_UD<n>_<ATIVIDADE><n>`, que também é o `CONTEUDO.id` e a chave de storage.
+
+### PDF da leitura (M7)
+
+O formato "PDF da leitura" do Exportar grava `<pacote>.pdf` direto, sem diálogo de impressão: `gerarTypst` (front) produz o documento e `src-tauri/src/pdf.rs` compila com o Typst (crates `typst`, `typst-pdf`, `typst-layout`), com as fontes Poppins/Krona One de `src-tauri/fonts/` embutidas e as do `typst-assets` como reserva. O PDF sai marcado e validado como PDF/UA-1; se algum símbolo do conteúdo não tiver glifo, sai marcado sem o selo UA. Bloco novo precisa de um `case` em `gerarTypst` (versão para preencher, sem respostas).
 
 ## Agentes (`.claude/agents/`)
 
@@ -87,7 +93,6 @@ window.CONTEUDO = { formato: 2, id: "CTGESTAO_UD11_LEITURA2", contexto, titulo, 
 
 Escape: campos HTML e campos simples inseridos via innerHTML são escapados pelo compilador. Já os campos que o motor insere via **textContent** não são escapados: `quiz.explica`, `multipla.opcoes[].fb`, `msgAcerto`, `msgRevisar`, `reflexao.aviso`, `escolha.opcoes[].retorno`, `categorizar.itens[].fb`, `ramificado.perguntas[].alternativas[].retorno` e `contexto`. Os títulos de `categorizar.categorias` são texto simples e são escapados. Na reflexão, `aviso` ausente usa o texto padrão, e `""` deixa a reflexão sem aviso (o compilador omite o campo quando está vazio).
 
-- `Motor.imprimir(conteudo, raiz)` (M7): a leitura numa página corrida para PDF, com a capa como cabeçalho, sem a tela de fim, os blocos interativos em versão para preencher (sem gabarito) e o Confira num anexo. Tipo novo pode trazer `imprimir(b, ctx)`.
 - `Motor.iniciar(conteudo, { chave?, telaInicial?, livre? })`. `livre` é o modo autor: não bloqueia o "Próximo" e esconde o aviso, mas as pendências continuam contando. `telaInicial` tem prioridade sobre `lesson_location`. A chamada devolve `{ ir, tela, total, pendencias, pendenciaTela, concluido }`.
 - Tipo novo de bloco: `Motor.bloco(tipo, { render(b, ctx), pendentes, aviso, falta: [sing, plural], estado, restaurar })`. Tipo desconhecido gera um aviso discreto, sem quebrar.
 - Textos vão por `innerHTML`, então aceitam `<strong>`, `<em>` e `<a target='_blank' rel='noopener'>`.

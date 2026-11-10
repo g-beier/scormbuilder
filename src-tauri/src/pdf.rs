@@ -39,7 +39,15 @@ struct Mundo {
 
 impl Mundo {
     fn novo(texto: &str) -> Self {
-        let fontes: Vec<Font> = FONTES.iter().flat_map(|d| Font::iter(Bytes::new(*d))).collect();
+        // Fontes do tema primeiro; as do typst-assets (Libertinus, New Computer Modern,
+        // DejaVu Sans Mono; licenças livres) só entram como reserva para símbolos que a
+        // Poppins não tem (setas, sinais matemáticos), via fallback do Typst.
+        let fontes: Vec<Font> = FONTES
+            .iter()
+            .copied()
+            .chain(typst_assets::fonts())
+            .flat_map(|d| Font::iter(Bytes::new(d)))
+            .collect();
         let id = RootedPath::new(VirtualRoot::Project, VirtualPath::new("leitura.typ").expect("caminho fixo válido")).intern();
         Self {
             library: LazyHash::new(Library::default()),
@@ -97,15 +105,29 @@ fn mensagens(diags: &[SourceDiagnostic]) -> String {
     format!("Não foi possível gerar o PDF:\n- {}", linhas.join("\n- "))
 }
 
-/// Compila o documento Typst e devolve o PDF (marcado, PDF/UA-1).
-pub fn gerar_pdf(fonte: &str) -> Result<Vec<u8>, String> {
+/// Compila o documento Typst e devolve o PDF marcado. Tenta o PDF/UA-1 (com as
+/// verificações extras de acessibilidade); se o conteúdo tiver um símbolo que
+/// nenhuma fonte embutida desenha (ex.: emoji), gera o PDF marcado sem o selo
+/// PDF/UA-1 em vez de falhar. Devolve também se saiu como PDF/UA-1.
+pub fn gerar_pdf_com_padrao(fonte: &str) -> Result<(Vec<u8>, bool), String> {
     let mundo = Mundo::novo(fonte);
     let documento: PagedDocument = typst::compile(&mundo).output.map_err(|d| mensagens(&d))?;
-    let opcoes = PdfOptions {
+    let ua = PdfOptions {
         standards: PdfStandards::new(&[PdfStandard::Ua_1]).map_err(|e| format!("Padrão de PDF inválido: {e:?}"))?,
         ..PdfOptions::default()
     };
-    typst_pdf::pdf(&documento, &opcoes).map_err(|d| mensagens(&d))
+    match typst_pdf::pdf(&documento, &ua) {
+        Ok(pdf) => Ok((pdf, true)),
+        Err(d) if d.iter().all(|x| x.message.contains("could not be displayed")) => {
+            let pdf = typst_pdf::pdf(&documento, &PdfOptions::default()).map_err(|d| mensagens(&d))?;
+            Ok((pdf, false))
+        }
+        Err(d) => Err(mensagens(&d)),
+    }
+}
+
+pub fn gerar_pdf(fonte: &str) -> Result<Vec<u8>, String> {
+    gerar_pdf_com_padrao(fonte).map(|(pdf, _)| pdf)
 }
 
 /// Gera `<destino>/<nome>.pdf`. Se existir e `sobrescrever` for falso, devolve
@@ -204,5 +226,33 @@ Texto com *negrito*, _itálico_ e #link("https://example.org")[um link].
         let sobras: Vec<_> = fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name()).collect();
         assert_eq!(sobras.len(), 1, "{sobras:?}");
         let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod fixtures {
+    use super::*;
+
+    /// Compila os `.typ` gerados pelo front (ver `src/modelo/pdf.test.ts`):
+    /// `PDF_SAIDA=<pasta> cargo test --lib compila_fixtures -- --ignored`
+    #[test]
+    #[ignore]
+    fn compila_fixtures() {
+        let pasta = std::env::var("PDF_SAIDA").expect("defina PDF_SAIDA");
+        let mut falhas = Vec::new();
+        let mut n = 0;
+        for e in fs::read_dir(&pasta).unwrap().filter_map(|e| e.ok()) {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("typ") {
+                continue;
+            }
+            n += 1;
+            match gerar_pdf(&fs::read_to_string(&p).unwrap()) {
+                Ok(pdf) => fs::write(p.with_extension("pdf"), pdf).unwrap(),
+                Err(e) => falhas.push(format!("{}: {e}", p.display())),
+            }
+        }
+        assert!(n > 0, "nenhum .typ em {pasta}");
+        assert!(falhas.is_empty(), "{}", falhas.join("\n\n"));
     }
 }

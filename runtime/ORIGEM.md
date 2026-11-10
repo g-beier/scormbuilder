@@ -59,24 +59,3 @@ Portado do `CTGESTAO_UD11_QUIZ/js/app.js` (caminho pelas respostas, `proxima` po
 - Retomada: volta para a primeira pergunta sem resposta do caminho, ou para o resumo. Um destino inválido ou um ciclo encerram o caminho em vez de travar (o editor impede os dois).
 
 Teste: `node runtime/test/ramificado.mjs "$TMPDIR"cev-m6` (fixture `test/fixtures/ramificado-v2.data.js`).
-
-## Impressão / PDF da leitura (M7)
-
-Sem equivalente no ead-scorm. `Motor.imprimir(conteudo, raiz)` monta a leitura inteira numa página corrida (classe `.impressao` em `<html>` e `<body>`), para o aluno salvar em PDF e guardar como registro. O pacote SCORM não muda: o modo só é usado pela janela de impressão do app.
-
-- A **capa** vira o cabeçalho (contexto, rótulo, título, subtítulo) com campos "Nome" e "Data". A **tela de fim** não entra.
-- Blocos passivos usam o próprio `render`. Os interativos têm versão para preencher à mão, **sem gabarito nem retornos**:
-  - `quiz`, `multipla` e `escolha`: alternativas com caixas para marcar.
-  - `ordenar`: passos embaralhados com espaço para numerar, mais a nota.
-  - `reflexao`: linhas em branco (mais linhas quanto maior o `maxChars`) e o aviso sobre dados (o padrão do pacote fala do envio; no papel fica só o cuidado com nomes e casos).
-  - `categorizar`: tabela de itens × categorias.
-  - `ramificado`: roteiro com "→ vá para a pergunta N" em cada alternativa.
-  - `confira`: vai para um anexo "Para conferir" no fim (nova página), porque costuma trazer as respostas; na tela fica a referência ao item do anexo.
-- Tipo novo de bloco: pode registrar `imprimir(b, ctx)` em `Motor.bloco`. Bloco com pendência e sem `imprimir` vira um aviso discreto no documento.
-- CSS no fim do `tema.css`: `@page` A4, cores exatas na impressão, quebras de página que mantêm perguntas e linhas inteiras, links com a URL visível no papel.
-
-Depois da revisão de UX: telas com "Confira" (o padrão das Pesquisas) ganham um quadro "Suas anotações" antes da referência; o questionário com caminhos termina com linhas para anotar o caminho e a última resposta; o quiz diz "Marque uma alternativa."; a reflexão opcional diz "Resposta opcional."; o cabeçalho mostra o código do pacote e a data de geração (`opcoes.gerado`); `ordenar` e `categorizar` embaralham com semente no id do bloco (o mesmo conteúdo gera sempre o mesmo PDF); na impressão as bordas ficam mais escuras e as notas maiores.
-
-Ressalva: o PDF sai do diálogo de impressão do sistema e **não é marcado** (sem estrutura de títulos, listas e tabelas). Alunos com leitor de tela devem usar o pacote; o diálogo do editor diz isso.
-
-Teste: `node runtime/test/impressao.mjs "$TMPDIR"cev-m7 "$TMPDIR"cev-m0` (fixtures do M6 e, se existir a pasta do `montar.mjs`, os 18 LEITURA2): gera um PDF A4 de cada e confere cabeçalho, ausência da tela de fim, de controles e de gabarito, e o anexo do Confira.

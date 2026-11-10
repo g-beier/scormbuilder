@@ -1,5 +1,4 @@
 mod exportar;
-mod impressao;
 mod pdf;
 mod projetos;
 
@@ -26,7 +25,6 @@ pub fn run() {
             exportar::exportar_pacote,
             exportar::ler_preferencias,
             exportar::salvar_preferencias,
-            impressao::abrir_impressao,
             pdf::exportar_pdf,
         ])
         .run(tauri::generate_context!())

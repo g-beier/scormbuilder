@@ -4075,6 +4075,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "typst",
+ "typst-assets",
  "typst-layout",
  "typst-pdf",
  "zip",
