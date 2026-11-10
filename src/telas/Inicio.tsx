@@ -191,7 +191,9 @@ function AssistenteNovo({
     });
   }
 
-  const podeCriar = meta.titulo.trim() !== "";
+  const faltaTitulo = meta.titulo.trim() === "";
+  const faltaUd = !(meta.ud > 0);
+  const podeCriar = !faltaTitulo && !faltaUd;
 
   return (
     <Dialogo
@@ -216,14 +218,22 @@ function AssistenteNovo({
           e.preventDefault();
           if (!podeCriar) {
             setTentou(true);
-            document.querySelector<HTMLInputElement>("#form-novo input")?.focus();
+            // Foca o primeiro campo que falta.
+            const alvo = faltaTitulo ? "#form-novo [data-autofoco]" : "#form-novo input[type=number]";
+            document.querySelector<HTMLInputElement>(alvo)?.focus();
             return;
           }
           aoCriar({ ...meta, titulo: meta.titulo.trim() });
         }}
       >
         <p className="ajuda">Tudo isso pode ser mudado depois, em “Dados do pacote”.</p>
-        <FormMeta meta={meta} aoMudar={mudar} autoFocar erroTitulo={tentou && !podeCriar ? "Dê um título à atividade para continuar." : undefined} />
+        <FormMeta
+          meta={meta}
+          aoMudar={mudar}
+          autoFocar
+          erroTitulo={tentou && faltaTitulo ? "Dê um título à atividade para continuar." : undefined}
+          erroUd={tentou && faltaUd ? "Informe o número da UD (1 ou mais) para continuar." : undefined}
+        />
       </form>
     </Dialogo>
   );

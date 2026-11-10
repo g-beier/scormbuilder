@@ -29,6 +29,7 @@ function lerPreferencia(): boolean {
 
 export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): void }) {
   const slideSelecionadoId = useProjeto((s) => s.slideSelecionadoId);
+  const selecaoN = useProjeto((s) => s.selecaoN);
   const { selecionarSlide, selecionarBloco, atualizarMeta } = useProjeto.getState();
   const [dadosAbertos, setDadosAbertos] = useState(false);
   const [previaRecolhida, setPreviaRecolhida] = useState(lerPreferencia);
@@ -40,6 +41,15 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
   useEffect(() => {
     if (!slide && projeto.slides.length) selecionarSlide(projeto.slides[0].id);
   }, [slide, projeto.slides, selecionarSlide]);
+
+  // Ao abrir o editor (ex.: depois de "Criar SCORM"), o foco não fica perdido no <body>.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      document.querySelector<HTMLElement>(".form-slide-titulo")?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   useEffect(() => {
     const teclas = (e: KeyboardEvent) => {
@@ -114,6 +124,7 @@ export function Editor({ projeto, aoInicio }: { projeto: Projeto; aoInicio(): vo
         <PainelPrevia
           projeto={projeto}
           slideSelecionadoId={slideSelecionadoId}
+          selecaoN={selecaoN}
           recolhido={previaRecolhida}
           aoAlternar={alternarPrevia}
         />

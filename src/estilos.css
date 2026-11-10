@@ -11,7 +11,7 @@
   --superficie: #ffffff;
   --superficie-2: #f9fafc;
   --borda: #d5d8e3;
-  --borda-forte: #9aa0b8;
+  --borda-forte: #7a809a;
   --texto: #1c1f33;
   --texto-suave: #545a73;
   --selecao: #e8eaf6;
@@ -333,7 +333,8 @@ legend {
   right: 3px;
   display: flex;
   gap: 2px;
-  opacity: 0.45;
+  /* Sempre visível (descobrível), mais apagada em repouso. */
+  opacity: 0.75;
 }
 .rico:hover .rico-barra,
 .rico:focus-within .rico-barra {
@@ -764,15 +765,19 @@ legend {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  /* Não encolhe abaixo do título mínimo + botão do pacote (nada se sobrepõe). */
+  min-width: min-content;
 }
 .input-titulo {
   flex: 1 1 auto;
+  min-width: 160px;
   max-width: 460px;
   font-weight: 700;
   font-size: 1.05rem;
   color: var(--navy);
   border-color: transparent !important;
+  /* Em repouso, só uma linha sutil embaixo: mostra que é editável. */
+  border-bottom-color: var(--borda-forte) !important;
   background: transparent !important;
 }
 .input-titulo:hover {
@@ -785,12 +790,23 @@ legend {
 .barra-titulo code {
   color: var(--texto-suave);
 }
+.btn-pacote {
+  flex-shrink: 0;
+}
+.pacote-codigo {
+  margin-left: -6px; /* cola o ":" em "Pacote" (o .btn tem gap) */
+}
+.barra-superior > .btn,
+.barra-superior .btn-problemas {
+  flex-shrink: 0;
+}
 .barra-grupo {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .dica-em-breve {
+  white-space: nowrap;
   font-size: 0.75rem;
   color: var(--texto-suave);
   background: var(--selecao);
@@ -798,6 +814,9 @@ legend {
   border-radius: 999px;
 }
 .indicador-salvamento {
+  /* Pode encolher (com reticências) para a barra caber; o texto inteiro fica no title. */
+  flex: 0 1 auto;
+  min-width: 70px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -805,12 +824,38 @@ legend {
   color: var(--texto-suave);
   white-space: nowrap;
 }
+.indicador-texto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .indicador-salvamento.salvo .icone {
   color: var(--verde);
 }
 .indicador-salvamento.erro {
   color: var(--perigo);
   font-weight: 600;
+}
+
+/* Janela estreita (até ~1250px): esconde o código do pacote e o texto de "Salvar como…"
+   só visualmente (continuam no nome acessível; o título mostra tudo ao passar o mouse). */
+@media (max-width: 1250px) {
+  .pacote-codigo,
+  .barra-superior .rotulo-largo {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .btn-salvar-como,
+  .btn-inicio {
+    padding-inline: 10px;
+  }
 }
 
 /* Problemas */
@@ -851,6 +896,19 @@ legend {
 .problemas-titulo {
   font-size: 1.05rem;
   color: var(--navy);
+}
+.problemas-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.problemas-subtitulo {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 .problemas-lista {
   list-style: none;
@@ -1014,6 +1072,7 @@ legend {
   flex: none;
   display: inline-flex;
   align-items: center;
+  gap: 3px;
   padding: 1px 7px;
   border-radius: 999px;
   font-size: 0.75rem;
@@ -1208,11 +1267,13 @@ legend {
   display: none;
 }
 .previa-quadro {
-  flex: 1;
-  min-height: 320px;
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.previa-quadro.grande .previa-palco {
+  flex: 1;
 }
 .previa-quadro.grande {
   position: fixed;
@@ -1253,8 +1314,7 @@ legend {
   margin-top: 2px;
 }
 .previa-palco {
-  flex: 1;
-  min-height: 200px;
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;

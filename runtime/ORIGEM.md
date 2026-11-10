@@ -23,3 +23,4 @@ Os arquivos usados como fonte estavam sem alterações locais naquele checkout.
 - `suspend_data` novo e compacto: `{"v":[telas vistas],"b":{"<tela>.<bloco>":estado}}`.
 - Validação: sem tela `fim`, com mais de uma ou com formato diferente de 2, mostra uma mensagem de erro na tela. Tipo de bloco desconhecido vira um aviso discreto (`p.nota`).
 - Todo o resto (bloqueio, pendências, texto do fim, aviso de rolagem, teclado/toque/swipe, modais, embaralhar, arrastar) é o mesmo código.
+- `ordenar`: o `aria-label` da lista usa o texto visível do `.flow-name` já renderizado (o `nome` chega escapado como HTML no `data.js`; antes as entidades, como `&amp;`, iam literais para o rótulo).

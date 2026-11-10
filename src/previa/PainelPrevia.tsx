@@ -13,6 +13,8 @@ import { HANDLE_GLOBAL, montarSrcdoc } from "./montarSrcdoc";
 export interface PropsPainelPrevia {
   projeto: Projeto;
   slideSelecionadoId: string | null;
+  /** Muda a cada clique numa tela da lista, mesmo na já selecionada. */
+  selecaoN?: number;
   recolhido: boolean;
   aoAlternar(): void;
 }
@@ -32,6 +34,8 @@ const DISPOSITIVOS = {
 type Dispositivo = keyof typeof DISPOSITIVOS;
 const ALTURA = 666;
 const DEBOUNCE_MS = 400;
+/** Altura do resumo fechado da "Situação SCORM" + o espaço entre eles. */
+const RESERVA_SITUACAO = 56;
 
 const STATUS_PT: Record<string, string> = {
   "not attempted": "não iniciada",
@@ -46,7 +50,7 @@ function urlRuntime(): string {
   return new URL("/runtime/", window.location.href).href;
 }
 
-export function PainelPrevia({ projeto, slideSelecionadoId, recolhido, aoAlternar }: PropsPainelPrevia) {
+export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido, aoAlternar }: PropsPainelPrevia) {
   const id = useId();
   const chave = "previa-" + projeto.id;
   const [dispositivo, setDispositivo] = useState<Dispositivo>("computador");
@@ -58,6 +62,8 @@ export function PainelPrevia({ projeto, slideSelecionadoId, recolhido, aoAlterna
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const palcoRef = useRef<HTMLDivElement>(null);
+  const corpoRef = useRef<HTMLDivElement>(null);
+  const quadroRef = useRef<HTMLDivElement>(null);
   const fecharGrandeRef = useRef<HTMLButtonElement>(null);
   const abrirGrandeRef = useRef<HTMLButtonElement>(null);
   /** Ids das telas do documento carregado no iframe (índice = tela do motor). */
@@ -152,20 +158,30 @@ export function PainelPrevia({ projeto, slideSelecionadoId, recolhido, aoAlterna
       pendenteId.current = slideSelecionadoId;
       setRecargas((n) => n + 1);
     }
-  }, [slideSelecionadoId, handle]);
+  }, [slideSelecionadoId, selecaoN, handle]);
 
   // ---------- Escala para caber no palco ----------
   const { largura } = DISPOSITIVOS[dispositivo];
   const [espaco, setEspaco] = useState({ w: 0, h: 0 });
+  // O palco só ocupa a altura da moldura + legenda (sem sobra antes da "Situação SCORM").
+  // A altura disponível vem do contêiner: o corpo do painel (descontando o que fica
+  // acima do palco e o resumo da "Situação SCORM") ou, na janela grande, o quadro.
   useLayoutEffect(() => {
-    const el = palcoRef.current;
-    if (!el) return;
-    const medir = () => setEspaco({ w: el.clientWidth, h: el.clientHeight });
+    const palco = palcoRef.current;
+    const caixa = grande ? quadroRef.current : corpoRef.current;
+    if (!palco || !caixa) return;
+    const medir = () => {
+      const cx = caixa.getBoundingClientRect();
+      const acima = palco.getBoundingClientRect().top - cx.top + (grande ? 0 : caixa.scrollTop);
+      const estilo = getComputedStyle(caixa);
+      const reserva = parseFloat(estilo.paddingBottom) + (grande ? 0 : RESERVA_SITUACAO);
+      setEspaco({ w: palco.clientWidth, h: Math.max(0, caixa.clientHeight - acima - reserva) });
+    };
     medir();
     const ro = new ResizeObserver(medir);
-    ro.observe(el);
+    ro.observe(caixa);
     return () => ro.disconnect();
-  }, [recolhido]);
+  }, [recolhido, grande, falha]);
   // Reserva ~2 linhas para a legenda abaixo da moldura.
   const LEGENDA = 44;
   const escala =
@@ -215,8 +231,9 @@ export function PainelPrevia({ projeto, slideSelecionadoId, recolhido, aoAlterna
         </button>
         {!recolhido && <h2 className="coluna-titulo">Prévia</h2>}
       </div>
-      <div id={id} className="previa-corpo" hidden={recolhido}>
+      <div id={id} className="previa-corpo" hidden={recolhido} ref={corpoRef}>
         <div
+          ref={quadroRef}
           className={`previa-quadro${grande ? " grande" : ""}`}
           role={grande ? "dialog" : undefined}
           aria-modal={grande ? true : undefined}
@@ -278,7 +295,7 @@ export function PainelPrevia({ projeto, slideSelecionadoId, recolhido, aoAlterna
             <p className="previa-aviso" role="alert">
               <Icone nome="alerta" tamanho={18} />
               <span>
-                A prévia não abriu: {falha} Veja a lista de erros na barra superior.
+                A prévia não abriu: {falha} Veja os itens a corrigir na barra superior.
               </span>
             </p>
           )}

@@ -19,8 +19,19 @@ export function textoVisivel(html: unknown): string {
     .trim();
 }
 
+/** Campo rico (HTML): vazio se não sobra texto visível. */
 function vazio(html: unknown): boolean {
   return textoVisivel(html) === "";
+}
+
+/** Campo simples (texto puro, sem HTML): vazio só se for só espaço. "<b>" é texto. */
+function vazioSimples(v: unknown): boolean {
+  return typeof v !== "string" || v.trim() === "";
+}
+
+/** "a", "a e b", "a, b e c". */
+function juntar(itens: string[]): string {
+  return itens.length <= 1 ? (itens[0] ?? "") : `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 }
 
 /** Todos os trechos de texto/HTML de um bloco, com o caminho do campo. */
@@ -126,7 +137,7 @@ export function validar(projeto: Projeto): Problema[] {
   // ---------- Estrutura ----------
   const fins = slides.map((s, i) => [s, i] as const).filter(([s]) => s.tipo === "fim");
   if (fins.length === 0) {
-    probs.push({ nivel: "erro", mensagem: "Falta a tela de fim. Todo SCORM precisa terminar com uma tela de fim." });
+    probs.push({ nivel: "erro", mensagem: "Falta a tela de fim. Todo SCORM precisa terminar com uma tela de fim. Use “+ Tela de fim” na lista de telas." });
   } else {
     if (fins.length > 1) {
       for (const [s, i] of fins.slice(0, -1)) {
@@ -142,31 +153,28 @@ export function validar(projeto: Projeto): Problema[] {
       probs.push({
         nivel: "erro",
         slideId: ultimoFim.id,
-        mensagem: `${tela(iFim)}: a tela de fim precisa ser a última.`,
+        mensagem: `${tela(iFim)}: a tela de fim precisa ser a última. Arraste-a para o fim da lista.`,
       });
     }
   }
   slides.forEach((s, i) => {
     if (s.tipo === "capa" && i !== 0) {
-      probs.push({ nivel: "erro", slideId: s.id, mensagem: `${tela(i)}: a capa precisa ser a primeira tela.` });
+      probs.push({ nivel: "erro", slideId: s.id, mensagem: `${tela(i)}: a capa precisa ser a primeira tela. Arraste-a para o início da lista.` });
     }
   });
 
   // ---------- Ids ----------
   const vistos = new Set<string>();
-  const checarId = (id: string, i: number, slideId: string, blocoId?: string) => {
-    const onde = blocoId ? "um bloco" : "a tela";
-    if (!id) {
-      probs.push({ nivel: "erro", slideId, blocoId, campo: "id", mensagem: `${tela(i)}: ${onde} está sem identificador interno.` });
-    } else if (vistos.has(id)) {
-      probs.push({
-        nivel: "erro",
-        slideId,
-        blocoId,
-        campo: "id",
-        mensagem: `${tela(i)}: ${onde} repete o identificador interno "${id}". Duplique o item pelo editor em vez de copiar o arquivo.`,
-      });
-    } else vistos.add(id);
+  const checarId = (id: string, i: number, slideId: string, bloco?: Bloco) => {
+    if (id && !vistos.has(id)) {
+      vistos.add(id);
+      return;
+    }
+    const comum = "(comum quando o arquivo é copiado à mão)";
+    const mensagem = bloco
+      ? `${tela(i)}: o bloco “${NOMES_BLOCO[bloco.tipo] ?? bloco.tipo}” está corrompido ou repetido ${comum}. Duplique-o pelo editor e exclua o original.`
+      : `${tela(i)}: esta tela está corrompida ou repetida ${comum}. Duplique-a pela lista de telas e exclua a original.`;
+    probs.push({ nivel: "erro", slideId, blocoId: bloco?.id, campo: "id", mensagem });
   };
 
   // ---------- Telas ----------
@@ -175,8 +183,8 @@ export function validar(projeto: Projeto): Problema[] {
     const erroSlide = (campo: string, mensagem: string) =>
       probs.push({ nivel: "erro", slideId: s.id, campo, mensagem: `${tela(i)}: ${mensagem}` });
 
-    if (vazio(s.titulo)) erroSlide("titulo", "falta o título.");
-    if (s.tipo === "fim" && vazio(s.texto)) erroSlide("texto", "falta o texto da tela de fim.");
+    if (vazioSimples(s.titulo)) erroSlide("titulo", "falta o título.");
+    if (s.tipo === "fim" && vazio(s.texto)) erroSlide("texto", "falta a mensagem final.");
 
     for (const [campo, html] of textosDoSlide(s)) linkAvisos(html, i, s.id, undefined, campo);
 
@@ -185,12 +193,12 @@ export function validar(projeto: Projeto): Problema[] {
       probs.push({
         nivel: "aviso",
         slideId: s.id,
-        mensagem: `${tela(i)}: a tela ainda não tem nenhum bloco de conteúdo.`,
+        mensagem: `${tela(i)}: a tela ainda não tem nenhum bloco de conteúdo. Use “Adicionar bloco”.`,
       });
       return;
     }
     s.blocos.forEach((b) => {
-      checarId(b.id, i, s.id, b.id);
+      checarId(b.id, i, s.id, b);
       validarBloco(b, i, s.id);
       for (const [campo, html] of textosDoBloco(b)) linkAvisos(html, i, s.id, b.id, campo);
     });
@@ -205,7 +213,7 @@ export function validar(projeto: Projeto): Problema[] {
         slideId,
         blocoId,
         campo,
-        mensagem: `${tela(i)}: há um link que não começa com http:// ou https://. Confira o endereço.`,
+        mensagem: `${tela(i)}: há um link que não começa com http:// ou https://. Verifique o endereço do link.`,
       });
     }
     if (achados.has("sem-blank")) {
@@ -214,7 +222,7 @@ export function validar(projeto: Projeto): Problema[] {
         slideId,
         blocoId,
         campo,
-        mensagem: `${tela(i)}: há um link que não abre em nova aba. Dentro do Moodle, ele tiraria o aluno da atividade.`,
+        mensagem: `${tela(i)}: há um link que não abre em nova aba. Dentro do Moodle, ele tiraria o aluno da atividade. Selecione o link, use o botão de link (⌘K) e clique em Aplicar.`,
       });
     }
   }
@@ -222,7 +230,7 @@ export function validar(projeto: Projeto): Problema[] {
   function validarBloco(b: Bloco, i: number, slideId: string) {
     const nome = NOMES_BLOCO[b.tipo] ?? b.tipo;
     const erro = (campo: string | undefined, msg: string) =>
-      probs.push({ nivel: "erro", slideId, blocoId: b.id, campo, mensagem: `${tela(i)}: no bloco "${nome}", ${msg}` });
+      probs.push({ nivel: "erro", slideId, blocoId: b.id, campo, mensagem: `${tela(i)}: no bloco “${nome}”, ${msg}` });
     const listaObrigatoria = (campo: string, v: string[] | undefined, falta: string, itemVazio: string) => {
       if (!v || v.length === 0) erro(campo, falta);
       else v.forEach((t, k) => vazio(t) && erro(`${campo}[${k}]`, itemVazio.replace("{n}", String(k + 1))));
@@ -244,26 +252,29 @@ export function validar(projeto: Projeto): Problema[] {
           const base = `cards[${k}]`;
           if (!CORES.includes(c.cor)) erro(`${base}.cor`, `escolha a cor do cartão ${k + 1}.`);
           const temAlgo =
-            !vazio(c.titulo) ||
+            !vazioSimples(c.titulo) ||
             !vazio(c.breve) ||
             (c.paras ?? []).some((t) => !vazio(t)) ||
             (c.lista ?? []).some((t) => !vazio(t));
-          if (!temAlgo) erro(base, `o cartão ${k + 1} está vazio.`);
+          if (!temAlgo) {
+            erro(base, `o cartão ${k + 1} está vazio.`);
+            return;
+          }
           (c.paras ?? []).forEach((t, j) => vazio(t) && erro(`${base}.paras[${j}]`, `o cartão ${k + 1} tem um parágrafo vazio.`));
           (c.lista ?? []).forEach((t, j) => vazio(t) && erro(`${base}.lista[${j}]`, `o cartão ${k + 1} tem um item de lista vazio.`));
         });
         break;
       case "ordenar":
-        if (vazio(b.nome)) erro("nome", "falta o nome da sequência.");
+        if (vazioSimples(b.nome)) erro("nome", "falta o nome da sequência.");
         if (!b.passos || b.passos.length < 2) erro("passos", "são necessários pelo menos 2 passos para ordenar.");
         else b.passos.forEach((t, k) => vazio(t) && erro(`passos[${k}]`, `o passo ${k + 1} está vazio.`));
-        if (vazio(b.porque)) erro("porque", "falta a explicação da ordem correta.");
+        if (vazio(b.porque)) erro("porque", "falta o texto de “Por que esta ordem”.");
         break;
       case "linha":
         if (!b.itens || b.itens.length === 0) erro("itens", "adicione pelo menos um marco.");
         else
           b.itens.forEach((it, k) => {
-            if (vazio(it.titulo)) erro(`itens[${k}].titulo`, `falta o título do marco ${k + 1}.`);
+            if (vazioSimples(it.titulo)) erro(`itens[${k}].titulo`, `falta o título do marco ${k + 1}.`);
             if (vazio(it.texto)) erro(`itens[${k}].texto`, `falta o texto do marco ${k + 1}.`);
           });
         break;
@@ -282,16 +293,16 @@ export function validar(projeto: Projeto): Problema[] {
           if (!Number.isInteger(p.correta) || p.correta < 0 || p.correta >= opcoes.length) {
             erro(`${base}.correta`, `marque qual é a alternativa correta da pergunta ${n}.`);
           }
-          if (vazio(p.explica)) erro(`${base}.explica`, `falta a explicação da resposta da pergunta ${n}.`);
+          if (vazioSimples(p.explica)) erro(`${base}.explica`, `falta a explicação da resposta da pergunta ${n}.`);
         });
         break;
       case "contraste":
-        if (!b.itens || b.itens.length === 0) erro("itens", "adicione pelo menos um item.");
+        if (!b.itens || b.itens.length === 0) erro("itens", "adicione pelo menos um lado.");
         else
           b.itens.forEach((it, k) => {
-            if (!CORES.includes(it.cor)) erro(`itens[${k}].cor`, `escolha a cor do item ${k + 1}.`);
-            if (vazio(it.titulo)) erro(`itens[${k}].titulo`, `falta o título do item ${k + 1}.`);
-            if (vazio(it.texto)) erro(`itens[${k}].texto`, `falta o texto do item ${k + 1}.`);
+            if (!CORES.includes(it.cor)) erro(`itens[${k}].cor`, `escolha a cor do lado ${k + 1}.`);
+            if (vazioSimples(it.titulo)) erro(`itens[${k}].titulo`, `falta o título do lado ${k + 1}.`);
+            if (vazio(it.texto)) erro(`itens[${k}].texto`, `falta o texto do lado ${k + 1}.`);
           });
         break;
       case "destaque":
@@ -301,12 +312,12 @@ export function validar(projeto: Projeto): Problema[] {
         if (vazio(b.html)) erro("html", "escreva a fonte.");
         break;
       case "confira":
-        if (vazio(b.botao)) erro("botao", "falta o texto do botão.");
-        if (vazio(b.titulo)) erro("titulo", "falta o título da janela.");
+        if (vazioSimples(b.botao)) erro("botao", "falta o texto do botão.");
+        if (vazioSimples(b.titulo)) erro("titulo", "falta o título da janela.");
         listaObrigatoria("paras", b.paras, "escreva o texto que aparece ao abrir.", "o parágrafo {n} está vazio.");
         break;
       default:
-        erro(undefined, `o tipo de bloco "${(b as { tipo: string }).tipo}" não é conhecido.`);
+        erro(undefined, `o tipo de bloco “${(b as { tipo: string }).tipo}” não é conhecido. Exclua este bloco.`);
     }
   }
 
@@ -315,24 +326,32 @@ export function validar(projeto: Projeto): Problema[] {
   if (estimativa > LIMITE_SUSPEND_DATA) {
     probs.push({
       nivel: "aviso",
-      mensagem: `O SCORM está grande demais para o Moodle guardar o progresso com segurança (estimativa de ${estimativa} de ${LIMITE_SUSPEND_DATA} caracteres). Considere dividir em duas atividades ou reduzir telas, perguntas e Confiras.`,
+      mensagem:
+        "Esta atividade tem telas, perguntas e “Confira” demais para o Moodle guardar o progresso do aluno com segurança. Divida-a em duas atividades ou reduza o conteúdo.",
     });
   }
 
   // ---------- Dados do pacote ----------
+  // Nomes iguais aos rótulos de "Dados do pacote".
   const m = projeto.meta;
+  if (!(m?.ud > 0)) {
+    probs.push({
+      nivel: "erro",
+      campo: "meta",
+      mensagem: "Dados do pacote: falta o “Número da UD”. Ele faz parte do nome do pacote no Moodle.",
+    });
+  }
   const faltas: string[] = [];
-  if (!m?.curso?.trim()) faltas.push("curso");
-  if (!(m?.ud > 0)) faltas.push("número da UD");
-  if (!m?.atividade?.trim()) faltas.push("tipo de atividade");
-  if (!(m?.numero > 0)) faltas.push("número da atividade");
-  if (!m?.titulo?.trim()) faltas.push("título");
-  if (!m?.contexto?.trim()) faltas.push("contexto (linha do cabeçalho)");
+  if (!m?.curso?.trim()) faltas.push("“Curso”");
+  if (!m?.atividade?.trim()) faltas.push("“Tipo de atividade”");
+  if (!(m?.numero > 0)) faltas.push("“Número da atividade”");
+  if (!m?.titulo?.trim()) faltas.push("“Título da atividade”");
+  if (!m?.contexto?.trim()) faltas.push("“Linha de contexto”");
   if (faltas.length) {
     probs.push({
       nivel: "aviso",
       campo: "meta",
-      mensagem: `Dados do pacote incompletos: falta ${faltas.join(", ")}.`,
+      mensagem: `Dados do pacote incompletos: ${faltas.length === 1 ? "falta" : "faltam"} ${juntar(faltas)}.`,
     });
   }
 

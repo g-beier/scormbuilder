@@ -141,6 +141,17 @@ export function ListaEditavel<T>({
     });
   }
 
+  /** Depois de remover, foca o item vizinho (anterior, senão o próximo) ou o título da lista. */
+  function removerEFocar(i: number) {
+    aoRemover(i);
+    requestAnimationFrame(() => {
+      const vizinho = i > 0 ? i - 1 : 0;
+      const li = raiz.current?.querySelectorAll<HTMLElement>(":scope > ol > li")[vizinho];
+      const alvo = li?.querySelector<HTMLElement>("[data-foco]") ?? raiz.current?.querySelector<HTMLElement>(":scope > legend");
+      alvo?.focus();
+    });
+  }
+
   function adicionarEFocar() {
     aoAdicionar();
     requestAnimationFrame(() => {
@@ -193,7 +204,7 @@ export function ListaEditavel<T>({
                   aria-label={`Remover ${rotuloItem(i).toLowerCase()}`}
                   title="Remover"
                   disabled={itens.length <= minimo}
-                  onClick={() => aoRemover(i)}
+                  onClick={() => removerEFocar(i)}
                 >
                   <Icone nome="lixeira" />
                 </button>
