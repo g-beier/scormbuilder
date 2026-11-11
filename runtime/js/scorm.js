@@ -1,3 +1,4 @@
+/*! SCORM Builder — MIT License — Copyright (c) 2026 Gustav Eckard Gorniski Beier. Ver LICENSE em https://github.com/g-beier/scormbuilder */
 /* Wrapper mínimo para SCORM 1.2, com fallback em localStorage para testes fora do LMS.
    Scorm.init(chave): a chave do localStorage vem do pacote (CONTEUDO.id), para não misturar projetos. */
 var Scorm = (function () {

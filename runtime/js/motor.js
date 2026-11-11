@@ -1,3 +1,4 @@
+/*! SCORM Builder — MIT License — Copyright (c) 2026 Gustav Eckard Gorniski Beier. Ver LICENSE em https://github.com/g-beier/scormbuilder */
 /* Motor v2 dos pacotes SCORM do construtor (derivado do LEITURA2 da UD18, ead-scorm).
    ES5, sem dependências. Conteúdo em window.CONTEUDO (formato 2): telas com blocos
    renderizados na ordem do array. Cada tipo de bloco é um registro em Motor.bloco(). */

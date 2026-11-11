@@ -46,6 +46,9 @@
       "minimumSystemVersion": "11.0"
     },
     "publisher": "Escoteiros do Brasil - RS",
+    "copyright": "Copyright (c) 2026 Gustav Eckard Gorniski Beier",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
     "shortDescription": "Construtor de pacotes SCORM 1.2 para o Campo Escola Virtual",
     "category": "Education"
   },

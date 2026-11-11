@@ -1,8 +1,9 @@
 [package]
 name = "scorm-builder"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Construtor de pacotes SCORM 1.2 para o Campo Escola Virtual"
+authors = ["Gustav Eckard Gorniski Beier"]
+license = "MIT"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

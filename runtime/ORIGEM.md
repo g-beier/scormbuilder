@@ -83,3 +83,7 @@ Tipo novo, sem equivalente no LEITURA2 nem no kit. Bloco passivo (como `texto` o
 - Altura: `max-height: 40vh` (com `266px` antes, como reserva). O `vh` dentro do iframe do Moodle é a altura do iframe (666,5px), então dá ~266px: em 375px a área que rola tem ~469px e cabem kicker, título de duas linhas, um retrato no limite e um parágrafo; com 45vh (~300px) essa tela já rolava. Largura até 100%, proporção mantida (`object-fit: contain`), cantos `var(--raio)`.
 
 Teste: `node runtime/test/imagem.mjs "$TMPDIR"cev-m9` (fixture `test/fixtures/imagem-v2.data.js` + `test/fixtures/img/`, PNGs gerados com as cores do tema; 1200x666 e 375x666): render, alt literal, decorativa, legenda HTML, carregamento preguiçoso, erro de carga, endereços recusados sem requisição, sem rolagem horizontal, telas que cabem sem rolar, não bloqueia, sem estado no `suspend_data` e conclusão.
+
+## Licença (2026-11-10)
+
+O projeto é MIT (`LICENSE` na raiz). `motor.js`, `scorm.js` e `tema.css` começam com um comentário `/*! … MIT License … */`, que vai junto em cada pacote exportado, como a MIT exige. As fontes seguem sob a OFL (`fonts/LICENSE-*.txt`).

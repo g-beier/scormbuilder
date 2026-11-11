@@ -55,6 +55,10 @@ TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s scormbui
 npm run tauri build -- --bundles app
 ```
 
+## Licença
+
+O código é distribuído sob a [licença MIT](LICENSE) (Copyright (c) 2026 Gustav Eckard Gorniski Beier). O motor que vai dentro de cada pacote exportado (`motor.js`, `scorm.js`, `tema.css`) leva um cabeçalho com o aviso da licença.
+
 ## Fontes e licenças
 
 As fontes Poppins e Krona One são distribuídas sob a SIL Open Font License (ver `runtime/fonts/` e `src-tauri/fonts/`).
