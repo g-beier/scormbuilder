@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import type { DownloadEvent } from "@tauri-apps/plugin-updater";
 
 const check = vi.fn();
@@ -74,7 +75,13 @@ describe("Atualizacao", () => {
     fireEvent.click(screen.getByText("Procurar atualizações"));
     await flush();
     expect(screen.getByRole("status").textContent).toMatch(/Não foi possível procurar atualizações/);
-    fireEvent.click(screen.getByText("Procurar atualizações"));
+    const botao = screen.getByText("Procurar atualizações");
+    botao.focus();
+    fireEvent.click(botao);
+    // Durante a busca o botão continua focável (aria-disabled, não disabled).
+    expect(botao.getAttribute("aria-disabled")).toBe("true");
+    expect(botao.hasAttribute("disabled")).toBe(false);
+    expect(document.activeElement).toBe(botao);
     await flush();
     expect(screen.getByRole("status").textContent).toMatch(/já tem a versão mais recente/);
   });
@@ -83,7 +90,8 @@ describe("Atualizacao", () => {
     check.mockResolvedValue(pacote("0.2.0"));
     const { unmount } = render(<Atualizacao />);
     await flush();
-    expect(screen.getByRole("status").textContent).toMatch(/Nova versão 0\.2\.0 disponível/);
+    expect(screen.getByRole("status").textContent).toBe("Nova versão 0.2.0 disponível.");
+    expect(screen.getByText(/Você tem a versão 0\.1\.0\. Seus rascunhos continuam salvos\./)).toBeTruthy();
     fireEvent.click(screen.getByText("Agora não"));
     expect(screen.getByRole("status").textContent).toBe("");
     unmount();
@@ -103,19 +111,31 @@ describe("Atualizacao", () => {
       cb({ event: "Finished" });
     });
     check.mockResolvedValue(p);
-    const ocupado = vi.fn();
-    render(<Atualizacao aoMudarOcupado={ocupado} />);
+    const bloqueio = vi.fn();
+    render(<Atualizacao aoMudarBloqueio={bloqueio} />);
     await flush();
     fireEvent.click(screen.getByText("Atualizar agora"));
     await flush();
     expect(salvarAgora).toHaveBeenCalledTimes(1);
-    const barra = screen.getByRole("progressbar", { name: "Download da versão 0.2.0" }) as HTMLProgressElement;
+    // Região viva: só a frase curta; a barra e o percentual ficam fora dela.
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Baixando a versão 0.2.0.");
+    const barra = screen.getByRole("progressbar", { name: "Baixando a versão 0.2.0… 20%" }) as HTMLProgressElement;
+    expect(status.contains(barra)).toBe(false);
     expect(barra.value).toBeCloseTo(0.25);
-    expect(ocupado).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText("Não feche o aplicativo até terminar.")).toBeTruthy();
+    expect(bloqueio).toHaveBeenLastCalledWith("baixando");
+    // O botão clicado sumiu: o foco vai para o aviso, não para o body.
+    expect(document.activeElement?.classList.contains("atualizacao-aviso")).toBe(true);
     await act(async () => soltar());
-    expect(screen.getByRole("status").textContent).toMatch(/Versão 0\.2\.0 instalada/);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Atualização instalada. Reinicie o aplicativo para usar a versão nova.",
+    );
+    expect(bloqueio).toHaveBeenLastCalledWith("reiniciar");
     expect(relaunch).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Reiniciar para concluir"));
+    // Ao entrar em "pronto", o foco vai para "Reiniciar agora".
+    expect(document.activeElement).toBe(screen.getByText("Reiniciar agora"));
+    fireEvent.click(screen.getByText("Reiniciar agora"));
     await flush();
     expect(salvarAgora).toHaveBeenCalledTimes(2);
     expect(relaunch).toHaveBeenCalledTimes(1);
@@ -141,19 +161,22 @@ describe("Atualizacao", () => {
   it("erro no download: mensagem amigável e “Tentar de novo”", async () => {
     const p = pacote("0.2.0", [{ event: "Started", data: { contentLength: 10 } }], new Error("connection reset"));
     check.mockResolvedValue(p);
-    const ocupado = vi.fn();
-    render(<Atualizacao aoMudarOcupado={ocupado} />);
+    const bloqueio = vi.fn();
+    render(<Atualizacao aoMudarBloqueio={bloqueio} />);
     await flush();
     fireEvent.click(screen.getByText("Atualizar agora"));
     await flush();
-    const status = screen.getByRole("status").textContent ?? "";
-    expect(status).toMatch(/Não foi possível baixar a atualização/);
-    expect(status).not.toMatch(/connection reset/);
-    expect(ocupado).toHaveBeenLastCalledWith(false);
+    const alerta = screen.getByRole("alert").textContent ?? "";
+    expect(alerta).toBe(
+      "Não foi possível baixar a atualização. Confira a internet e tente de novo. Seus rascunhos continuam salvos.",
+    );
+    expect(screen.getByRole("status").textContent).toBe("");
+    expect(bloqueio).toHaveBeenLastCalledWith(null);
+    expect(document.activeElement).toBe(screen.getByText("Tentar de novo"));
     p.downloadAndInstall.mockImplementation(async () => {});
     fireEvent.click(screen.getByText("Tentar de novo"));
     await flush();
-    expect(screen.getByText("Reiniciar para concluir")).toBeTruthy();
+    expect(screen.getByText("Reiniciar agora")).toBeTruthy();
   });
 
   it("com projeto aberto, não instala nem reinicia", async () => {
@@ -165,7 +188,46 @@ describe("Atualizacao", () => {
     fireEvent.click(screen.getByText("Atualizar agora"));
     await flush();
     expect(p.downloadAndInstall).not.toHaveBeenCalled();
-    expect(screen.getByRole("status").textContent).toMatch(/Feche o projeto/);
+    expect(screen.getByRole("alert").textContent).toMatch(/Feche o projeto/);
+  });
+
+  it("“Agora não” devolve o foco ao destino indicado", async () => {
+    check.mockResolvedValue(pacote("0.2.0"));
+    const titulo = createRef<HTMLHeadingElement>();
+    render(
+      <>
+        <h1 ref={titulo} tabIndex={-1}>
+          SCORM Builder
+        </h1>
+        <Atualizacao focoAoDispensar={titulo} />
+      </>,
+    );
+    await flush();
+    const botao = screen.getByText("Agora não");
+    botao.focus();
+    fireEvent.click(botao);
+    expect(document.activeElement).toBe(titulo.current);
+  });
+
+  it("falha ao reiniciar: alerta e “Tentar reiniciar de novo” não baixa de novo", async () => {
+    const p = pacote("0.2.0");
+    check.mockResolvedValue(p);
+    relaunch.mockRejectedValueOnce(new Error("sem permissão"));
+    const bloqueio = vi.fn();
+    render(<Atualizacao aoMudarBloqueio={bloqueio} />);
+    await flush();
+    fireEvent.click(screen.getByText("Atualizar agora"));
+    await flush();
+    fireEvent.click(screen.getByText("Reiniciar agora"));
+    await flush();
+    expect(screen.getByRole("alert").textContent).toMatch(/Não foi possível reiniciar/);
+    expect(bloqueio).toHaveBeenLastCalledWith("reiniciar");
+    const tentar = screen.getByText("Tentar reiniciar de novo");
+    expect(document.activeElement).toBe(tentar);
+    fireEvent.click(tentar);
+    await flush();
+    expect(p.downloadAndInstall).toHaveBeenCalledTimes(1);
+    expect(relaunch).toHaveBeenCalledTimes(2);
   });
 
   it("fora do app (npm run dev) não aparece nem procura", async () => {

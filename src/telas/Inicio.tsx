@@ -1,5 +1,5 @@
 /** Tela inicial: novo SCORM, rascunhos recentes, abrir arquivo e importar pacote. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Meta, Projeto } from "../modelo/tipos";
 import { metaVazia, novoProjeto } from "../modelo/fabrica";
 import { importarDataJs } from "../modelo/importar";
@@ -13,7 +13,12 @@ import { editadoHa } from "../util/tempo";
 import { Dialogo } from "../editor/Dialogo";
 import { FormMeta, sugerirContexto } from "../editor/FormMeta";
 import { Icone } from "../editor/Icones";
-import { Atualizacao } from "./Atualizacao";
+import { Atualizacao, type BloqueioAtualizacao } from "./Atualizacao";
+
+const MSG_BLOQUEIO: Record<Exclude<BloqueioAtualizacao, null>, string> = {
+  baixando: "Enquanto a atualização não termina, não é possível abrir projetos.",
+  reiniciar: "Reinicie o aplicativo para continuar.",
+};
 
 export interface OpcoesAbrir {
   /** Projeto ainda sem rascunho em disco (novo ou importado): salvar já. */
@@ -26,8 +31,18 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
   const [novoAberto, setNovoAberto] = useState(false);
   const [ocupadoAcao, setOcupado] = useState(false);
   // Durante a atualização nada de abrir projeto: o instalador pode fechar o app.
-  const [atualizando, setAtualizando] = useState(false);
-  const ocupado = ocupadoAcao || atualizando;
+  // As ações ficam com aria-disabled (continuam focáveis) e uma frase visível explica o motivo.
+  const [bloqueio, setBloqueio] = useState<BloqueioAtualizacao>(null);
+  const atualizando = bloqueio !== null;
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+  /** Atributos das ações bloqueadas pela atualização. */
+  const travada = atualizando ? { "aria-disabled": true, "aria-describedby": "inicio-bloqueio" } : {};
+  /** Ignora o clique enquanto a atualização bloqueia as ações. */
+  const seLivre =
+    <A extends unknown[]>(f: (...a: A) => unknown) =>
+    (...a: A) => {
+      if (!atualizando) void f(...a);
+    };
 
   const carregar = useCallback(async () => {
     if (!emTauri()) {
@@ -94,24 +109,36 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
   return (
     <div className="inicio">
       <header className="inicio-topo">
-        <h1>SCORM Builder</h1>
+        <h1 ref={tituloRef} tabIndex={-1}>
+          SCORM Builder
+        </h1>
         <p>Monte atividades SCORM para o Moodle do Campo Escola Virtual.</p>
       </header>
 
       <main className="inicio-corpo">
-        <Atualizacao aoMudarOcupado={setAtualizando} />
+        <Atualizacao aoMudarBloqueio={setBloqueio} focoAoDispensar={tituloRef} />
+        {bloqueio && (
+          <p id="inicio-bloqueio" className="inicio-bloqueio">
+            {MSG_BLOQUEIO[bloqueio]}
+          </p>
+        )}
         <section className="inicio-acoes" aria-label="Começar">
-          <button type="button" className="cartao-acao principal" onClick={() => setNovoAberto(true)} disabled={atualizando}>
+          <button
+            type="button"
+            className="cartao-acao principal"
+            onClick={seLivre(() => setNovoAberto(true))}
+            {...travada}
+          >
             <Icone nome="mais" tamanho={28} />
             <span className="cartao-acao-nome">Novo SCORM</span>
             <span className="cartao-acao-desc">Comece do zero, com capa e tela de fim prontas.</span>
           </button>
-          <button type="button" className="cartao-acao" onClick={abrirDeArquivo} disabled={ocupado}>
+          <button type="button" className="cartao-acao" onClick={seLivre(abrirDeArquivo)} disabled={ocupadoAcao} {...travada}>
             <Icone nome="arquivo" tamanho={28} />
             <span className="cartao-acao-nome">Abrir arquivo…</span>
             <span className="cartao-acao-desc">Um projeto salvo com “Salvar como…” (.cevscorm).</span>
           </button>
-          <button type="button" className="cartao-acao" onClick={importar} disabled={ocupado}>
+          <button type="button" className="cartao-acao" onClick={seLivre(importar)} disabled={ocupadoAcao} {...travada}>
             <Icone nome="pasta" tamanho={28} />
             <span className="cartao-acao-nome">Importar SCORM existente…</span>
             <span className="cartao-acao-desc">Escolha a pasta de um pacote pronto (com js/data.js) para usar como ponto de partida.</span>
@@ -128,7 +155,10 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
             <ul className="lista-rascunhos">
               {rascunhos.map((r) => (
                 <li key={r.id} className="cartao-rascunho">
-                  <button type="button" className="rascunho-abrir" onClick={() => abrirDoRascunho(r)} disabled={ocupado}>
+                  <button type="button" className="rascunho-abrir" onClick={seLivre(() => abrirDoRascunho(r))}
+                    disabled={ocupadoAcao}
+                    {...travada}
+                  >
                     <span className="rascunho-titulo">{r.titulo || "Sem título"}</span>
                     <span className="rascunho-meta">
                       {[r.curso, r.ud > 0 ? `UD ${r.ud}` : ""].filter(Boolean).join(" · ") || "Curso não informado"}
@@ -142,8 +172,9 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
                     className="btn-icone perigo"
                     aria-label={`Excluir rascunho ${r.titulo || "sem título"}`}
                     title="Excluir"
-                    onClick={() => excluir(r)}
-                    disabled={ocupado}
+                    onClick={seLivre(() => excluir(r))}
+                    disabled={ocupadoAcao}
+                    {...travada}
                   >
                     <Icone nome="lixeira" />
                   </button>

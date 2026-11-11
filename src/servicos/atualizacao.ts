@@ -30,12 +30,18 @@ export async function procurarAtualizacao(): Promise<AtualizacaoDisponivel | nul
   return { versao: pacote.version, atual: pacote.currentVersion, pacote };
 }
 
+/** Há um projeto aberto: atualizar ou reiniciar agora poderia perder edições. A mensagem vai para a tela. */
+export class ErroProjetoAberto extends Error {
+  constructor() {
+    super("Feche o projeto e volte ao Início para atualizar.");
+    this.name = "ErroProjetoAberto";
+  }
+}
+
 /** Garante que nada do projeto se perde: salva o pendente e exige estar fora do editor. */
 async function garantirSemProjetoAberto() {
   await salvarAgora();
-  if (useProjeto.getState().projeto) {
-    throw new Error("Feche o projeto e volte ao Início para atualizar.");
-  }
+  if (useProjeto.getState().projeto) throw new ErroProjetoAberto();
 }
 
 /**
