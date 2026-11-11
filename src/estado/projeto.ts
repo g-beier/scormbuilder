@@ -17,6 +17,7 @@ import type { Draft } from "immer";
 import { duplicarBloco, duplicarSlide, novoBloco, novoSlide } from "../modelo/fabrica";
 import type { Bloco, Meta, Projeto, Slide, SlideConteudo, TipoBloco, TipoSlide } from "../modelo/tipos";
 import { criarAutosave, type Autosave, type EstadoAutosave } from "../servicos/autosave";
+import { imagensDeProjetos } from "../modelo/imagens";
 
 export const LIMITE_DESFAZER = 100;
 export const JANELA_GRUPO_MS = 1000;
@@ -378,4 +379,38 @@ export function agendarSalvamento() {
 /** Grava já o que estiver pendente e espera terminar. */
 export async function salvarAgora(): Promise<void> {
   await autosave?.flush();
+}
+
+// ---------- Imagens sem uso ----------
+
+/**
+ * Imagens usadas pelo projeto aberto **e** por todos os estados do histórico
+ * de desfazer/refazer: um arquivo que só um passo desfeito usa ainda pode
+ * voltar com Ctrl+Z, então não pode ser apagado.
+ */
+export function imagensEmUso(): string[] {
+  const { pastStates, futureStates } = useProjeto.temporal.getState();
+  return imagensDeProjetos([
+    useProjeto.getState().projeto,
+    ...pastStates.map((e) => e.projeto),
+    ...futureStates.map((e) => e.projeto),
+  ]);
+}
+
+/**
+ * Apaga do rascunho as imagens que nem o projeto nem o histórico usam. Chamar
+ * só ao fechar o projeto (voltar ao início ou sair), depois de gravar. Se a
+ * última gravação falhou, não apaga nada: o rascunho em disco pode ser mais
+ * antigo que o histórico e ainda citar uma imagem. Erros não impedem o fechamento.
+ */
+export async function limparImagensSemUso(
+  limpar: (id: string, usadas: string[]) => Promise<unknown>,
+): Promise<void> {
+  const p = useProjeto.getState().projeto;
+  if (!p || useSalvamento.getState().estado === "erro") return;
+  try {
+    await limpar(p.id, imagensEmUso());
+  } catch {
+    /* sobra uma imagem sem uso no rascunho: a próxima limpeza tenta de novo */
+  }
 }

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import type { Projeto } from "./modelo/tipos";
-import { agendarSalvamento, ligarAutosave, salvarAgora, useProjeto, useSalvamento } from "./estado/projeto";
+import { agendarSalvamento, limparImagensSemUso, ligarAutosave, salvarAgora, useProjeto, useSalvamento } from "./estado/projeto";
 import { salvarRascunho } from "./servicos/rascunhos";
+import { esquecerImagens, limparImagensOrfas } from "./servicos/imagens";
 import { emTauri } from "./servicos/ambiente";
 import { confirmar } from "./servicos/dialogos";
 import { Inicio, type OpcoesAbrir } from "./telas/Inicio";
@@ -24,6 +25,7 @@ export default function App() {
       getCurrentWindow()
         .onCloseRequested(async () => {
           await salvarAgora();
+          await limparImagensSemUso(limparImagensOrfas);
         })
         .then((f) => (cancelado ? f() : (soltar = f))),
     );
@@ -49,7 +51,9 @@ export default function App() {
       );
       if (!sair) return;
     }
+    if (emTauri()) await limparImagensSemUso(limparImagensOrfas);
     useProjeto.getState().fechar();
+    esquecerImagens();
   }
 
   return (

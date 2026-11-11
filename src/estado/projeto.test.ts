@@ -6,9 +6,11 @@ import {
   agendarSalvamento,
   desfazer,
   desligarAutosave,
+  imagensEmUso,
   JANELA_GRUPO_MS,
   LIMITE_DESFAZER,
   ligarAutosave,
+  limparImagensSemUso,
   refazer,
   salvarAgora,
   useProjeto,
@@ -222,5 +224,66 @@ describe("salvamento automático", () => {
     await salvarAgora();
     expect(salvar).toHaveBeenCalledTimes(1);
     expect(useSalvamento.getState()).toMatchObject({ estado: "erro", erro: "disco cheio" });
+  });
+});
+
+describe("imagens sem uso", () => {
+  const A = "0123456789abcdef.png";
+  const B = "1111111111111111.jpg";
+  const C = "2222222222222222.webp";
+  beforeEach(() => useSalvamento.setState({ estado: "salvo", erro: undefined }));
+
+  function comImagem(): { slideId: string; blocoId: string } {
+    const slideId = st().adicionarSlide("conteudo");
+    const blocoId = st().adicionarBloco(slideId, "imagem")!;
+    return { slideId, blocoId };
+  }
+  const trocar = (slideId: string, blocoId: string, nome: string) => {
+    t += JANELA_GRUPO_MS * 2;
+    st().editarBloco(slideId, blocoId, (b) => {
+      if (b.tipo === "imagem") b.arquivo = nome;
+    });
+  };
+
+  it("considera o projeto atual e todo o histórico de desfazer e refazer", async () => {
+    const { slideId, blocoId } = comImagem();
+    trocar(slideId, blocoId, A);
+    trocar(slideId, blocoId, B);
+    trocar(slideId, blocoId, C);
+    desfazer(); // volta para B; C fica no "refazer"
+    const limpar = vi.fn(async () => []);
+    await limparImagensSemUso(limpar);
+    expect(limpar).toHaveBeenCalledWith(st().projeto!.id, [A, B, C]);
+
+    // Bloco excluído: a imagem continua protegida enquanto o passo puder ser desfeito
+    st().excluirBloco(slideId, blocoId);
+    expect(imagensEmUso()).toEqual([A, B]);
+    desfazer();
+    expect(imagensEmUso()).toEqual([A, B]);
+  });
+
+  it("sem histórico (projeto recém-aberto), só as do projeto", async () => {
+    const { slideId, blocoId } = comImagem();
+    trocar(slideId, blocoId, A);
+    const p = st().projeto!;
+    st().abrir(structuredClone(p));
+    const limpar = vi.fn(async () => []);
+    await limparImagensSemUso(limpar);
+    expect(limpar).toHaveBeenCalledWith(p.id, [A]);
+  });
+
+  it("não limpa se a última gravação falhou, sem projeto, e erro não propaga", async () => {
+    const limpar = vi.fn(async () => {
+      throw new Error("disco");
+    });
+    useSalvamento.setState({ estado: "erro" });
+    await limparImagensSemUso(limpar);
+    expect(limpar).not.toHaveBeenCalled();
+    useSalvamento.setState({ estado: "salvo" });
+    await expect(limparImagensSemUso(limpar)).resolves.toBeUndefined();
+    expect(limpar).toHaveBeenCalledTimes(1);
+    st().fechar();
+    await limparImagensSemUso(limpar);
+    expect(limpar).toHaveBeenCalledTimes(1);
   });
 });
