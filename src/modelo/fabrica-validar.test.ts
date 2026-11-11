@@ -68,6 +68,9 @@ function blocoValido(tipo: Bloco["tipo"]): Bloco {
         { id: "q-3", enunciado: "Situação?", alternativas: [{ texto: "A", retorno: "", proxima: "fim" }, { texto: "B", retorno: "", proxima: "fim" }] },
       ];
       break;
+    case "imagem":
+      Object.assign(b, { arquivo: "0123456789abcdef.png", alt: "Mapa do Brasil" });
+      break;
     case "categorizar":
       b.enunciado = "Classifique.";
       b.categorias = ["Adulto", "Autoridades"];

@@ -26,12 +26,14 @@ export function CampoTexto({
   aoMudar,
   multilinha,
   placeholder,
-}: PropsCampoBase & { valor: string; aoMudar(v: string): void; multilinha?: boolean; placeholder?: string }) {
+  desabilitado,
+}: PropsCampoBase & { valor: string; aoMudar(v: string): void; multilinha?: boolean; placeholder?: string; desabilitado?: boolean }) {
   const id = useId();
   const comum = {
     id,
     value: valor ?? "",
     placeholder,
+    disabled: desabilitado,
     "data-foco": foco,
     "aria-describedby": ajuda ? `${id}-ajuda` : undefined,
     spellCheck: true,

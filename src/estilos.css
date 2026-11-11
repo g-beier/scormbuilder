@@ -313,6 +313,51 @@ textarea:focus-visible,
 .campo-check .ajuda {
   grid-column: 2;
 }
+/* Rótulo da caixa com alvo de 44px */
+.campo-check-grande label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* Bloco Imagem */
+.imagem-escolhida {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.imagem-miniatura {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 320px;
+  min-height: 80px;
+  padding: 6px;
+  background: var(--fundo, #f4f5fa);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-p);
+}
+.imagem-miniatura img {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+}
+.imagem-acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-imagem {
+  min-height: 44px;
+}
+textarea:disabled,
+input[type="text"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .linha-campos {
   display: flex;

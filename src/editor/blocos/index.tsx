@@ -15,6 +15,7 @@ import { FormReflexao } from "./FormReflexao";
 import { FormEscolha } from "./FormEscolha";
 import { FormCategorizar } from "./FormCategorizar";
 import { FormRamificado } from "./FormRamificado";
+import { FormImagem } from "./FormImagem";
 
 /** Form de cada tipo de bloco. */
 export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extract<Bloco, { tipo: T }>>> } = {
@@ -33,6 +34,7 @@ export const FORMS_BLOCO: { [T in TipoBloco]: ComponentType<PropsFormBloco<Extra
   escolha: FormEscolha,
   categorizar: FormCategorizar,
   ramificado: FormRamificado,
+  imagem: FormImagem,
 };
 
 /** Descrição curta de cada tipo, para o menu "Adicionar bloco". */
@@ -52,4 +54,5 @@ export const DESCRICOES_BLOCO: Record<TipoBloco, string> = {
   escolha: "Sem certo ou errado: cada alternativa mostra um retorno.",
   categorizar: "O aluno arrasta cada item para a categoria certa e clica em Verificar.",
   ramificado: "Uma pergunta por vez; cada resposta leva a outra pergunta. Sem nota.",
+  imagem: "Foto, mapa ou ilustração, com descrição e legenda.",
 };

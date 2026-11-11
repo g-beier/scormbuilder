@@ -227,6 +227,9 @@ export function limparBloco(b: Bloco, l: Limpar = limparHtml): Bloco {
       };
     case "categorizar":
       return { ...b, enunciado: l(b.enunciado), itens: b.itens.map((it) => ({ ...it, texto: l(it.texto) })) };
+    case "imagem":
+      // `alt` é texto simples (vai por atributo); só a legenda é rica.
+      return { ...b, legenda: l(b.legenda ?? "") };
   }
 }
 

@@ -40,6 +40,7 @@ const PATHS: Record<string, string> = {
   escolha: "M12 21v-9M12 12 6 6M12 12l6-6M6 6V3M6 6H3M18 6V3M18 6h3",
   ramificado: "M10 3h4v4h-4zM12 7v4M12 11l-6 4M12 11l6 4M4 15h4v4H4zM16 15h4v4h-4z",
   categorizar: "M3 4h8v16H3zM13 4h8v16h-8zM5 8h4M5 12h4M15 8h4",
+  imagem: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 9h.01",
   capa: "M5 3h14v18H5zM8 8h8M8 12h5",
   conteudo: "M4 4h16v16H4zM8 9h8M8 13h8M8 17h5",
   fim: "M5 21V4M5 4h12l-2 4 2 4H5",

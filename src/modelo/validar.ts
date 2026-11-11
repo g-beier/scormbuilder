@@ -1,5 +1,7 @@
 import {
+  ALT_LONGO,
   CORES,
+  RE_NOME_IMAGEM,
   MAX_CHARS_REFLEXAO,
   LIMITES_CATEGORIZAR,
   NOMES_BLOCO,
@@ -124,6 +126,10 @@ export function textosDoBloco(b: Bloco): Array<[campo: string, html: string]> {
         out.push([`opcoes[${i}].texto`, o.texto]);
         out.push([`opcoes[${i}].retorno`, o.retorno]);
       });
+      break;
+    case "imagem":
+      out.push(["alt", b.alt]);
+      out.push(["legenda", b.legenda]);
       break;
   }
   return out;
@@ -533,6 +539,22 @@ export function validar(projeto: Projeto): Problema[] {
             blocoId: b.id,
             campo: "itens",
             mensagem: `${tela(i)}: o bloco “${nome}” tem ${itens.length} itens. Com mais de ${itensAviso}, a atividade fica longa no celular; considere até 3 categorias e 8 itens, ou dividir em duas telas.`,
+          });
+        }
+        break;
+      }
+      case "imagem": {
+        if (vazioSimples(b.arquivo)) erro("arquivo", "falta escolher a imagem. Use “Escolher imagem…”.");
+        else if (!RE_NOME_IMAGEM.test(b.arquivo)) erro("arquivo", "o arquivo da imagem não é reconhecido. Use “Trocar imagem” e escolha a imagem de novo.");
+        if (b.decorativa === true) break;
+        if (vazioSimples(b.alt)) erro("alt", "descreva a imagem para quem usa leitor de tela, ou marque como decorativa.");
+        else if (b.alt.trim().length > ALT_LONGO) {
+          probs.push({
+            nivel: "aviso",
+            slideId,
+            blocoId: b.id,
+            campo: "alt",
+            mensagem: `${tela(i)}: no bloco “${nome}”, a descrição da imagem tem ${b.alt.trim().length} caracteres. Prefira até ${ALT_LONGO}: o leitor de tela lê tudo de uma vez. Detalhes longos ficam melhor na legenda ou no texto da tela.`,
           });
         }
         break;

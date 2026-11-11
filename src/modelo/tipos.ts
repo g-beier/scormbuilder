@@ -230,6 +230,28 @@ export interface BlocoRamificado extends BlocoBase {
   perguntas: PerguntaRamificada[];
 }
 
+/**
+ * Imagem (M9). O arquivo fica no rascunho (`<app_data>/rascunhos/<id>/img/`),
+ * com nome `<16 hex do sha256>.<ext>` dado pelo backend; o compilador gera
+ * `src: "img/<arquivo>"` no data.js.
+ */
+export interface BlocoImagem extends BlocoBase {
+  tipo: "imagem";
+  /** Nome em `img/` (ex.: `0123456789abcdef.png`); "" = ainda não escolhida. */
+  arquivo: string;
+  /** Texto alternativo (texto simples). Ignorado quando `decorativa`. */
+  alt: string;
+  /** HTML (texto rico inline); "" = sem legenda. */
+  legenda: string;
+  /** Sem significado para o conteúdo: o leitor de tela ignora. */
+  decorativa: boolean;
+}
+
+/** Nome de imagem do rascunho (mesma regra de `validar_nome_imagem` em imagens.rs). */
+export const RE_NOME_IMAGEM = /^[0-9a-f]{16}\.(png|jpg|webp|gif)$/;
+/** Texto alternativo acima disto vira aviso (leitores de tela leem tudo de uma vez). */
+export const ALT_LONGO = 250;
+
 export type Bloco =
   | BlocoTexto
   | BlocoLista
@@ -245,12 +267,14 @@ export type Bloco =
   | BlocoReflexao
   | BlocoEscolha
   | BlocoCategorizar
-  | BlocoRamificado;
+  | BlocoRamificado
+  | BlocoImagem;
 
 export type TipoBloco = Bloco["tipo"];
 export const TIPOS_BLOCO: readonly TipoBloco[] = [
   "texto",
   "lista",
+  "imagem",
   "cards",
   "ordenar",
   "linha",
@@ -314,7 +338,17 @@ export interface Projeto {
 
 /** Slide/bloco do data.js v2: o mesmo que o projeto, sem `extras`. */
 type SemExtras<T> = T extends unknown ? Omit<T, "extras"> : never;
-export type BlocoV2 = SemExtras<Bloco>;
+/** Bloco `imagem` no data.js v2: `src` no lugar de `arquivo`; opcionais só quando usados. */
+export interface BlocoImagemV2 {
+  id: string;
+  tipo: "imagem";
+  /** `img/<arquivo>` (no srcdoc da prévia, um `data:image/...;base64`). */
+  src: string;
+  alt: string;
+  legenda?: string;
+  decorativa?: true;
+}
+export type BlocoV2 = SemExtras<Exclude<Bloco, BlocoImagem>> | BlocoImagemV2;
 export type SlideV2 =
   | Omit<SlideCapa, "extras">
   | (Omit<SlideConteudo, "extras" | "blocos"> & { blocos: BlocoV2[] })
@@ -355,6 +389,7 @@ export const NOMES_BLOCO: Record<TipoBloco, string> = {
   escolha: "Escolha com retorno",
   categorizar: "Classificar em categorias",
   ramificado: "Questionário com caminhos",
+  imagem: "Imagem",
 };
 
 export const NOMES_SLIDE: Record<TipoSlide, string> = {

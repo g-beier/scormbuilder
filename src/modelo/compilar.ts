@@ -2,6 +2,7 @@ import type {
   Bloco,
   BlocoCards,
   BlocoCategorizar,
+  BlocoImagemV2,
   BlocoMultipla,
   BlocoOrdenar,
   BlocoReflexao,
@@ -68,6 +69,8 @@ function compilarCard(c: Card): Card {
  * e não são escapados. No categorizar, os títulos das categorias são texto
  * simples inserido via innerHTML (escapados); `itens[].fb`, `msgAcerto` e
  * `msgRevisar` vão por textContent.
+ * Na imagem, `alt` vai por atributo (setAttribute) e não é escapado; a legenda
+ * é rica; `src` é `img/<arquivo>` (o arquivo é copiado pela exportação).
  */
 export function compilarBloco(bloco: Bloco): BlocoV2 {
   // Defesa em profundidade: campos ricos passam pelo mesmo filtro da importação.
@@ -162,6 +165,14 @@ export function compilarBloco(bloco: Bloco): BlocoV2 {
       };
       if (temTexto(b.msgAcerto)) out.msgAcerto = b.msgAcerto;
       if (temTexto(b.msgRevisar)) out.msgRevisar = b.msgRevisar;
+      return out;
+    }
+    case "imagem": {
+      const decorativa = b.decorativa === true;
+      // Decorativa: o motor ignora o alt; o pacote não leva a descrição guardada no projeto.
+      const out: BlocoImagemV2 = { id: b.id, tipo: b.tipo, src: `img/${b.arquivo ?? ""}`, alt: decorativa ? "" : (b.alt ?? "") };
+      if (temTexto(b.legenda)) out.legenda = b.legenda;
+      if (decorativa) out.decorativa = true;
       return out;
     }
   }

@@ -121,6 +121,9 @@ export function novoBloco(tipo: TipoBloco): Bloco {
       const p2 = novaPerguntaRamificada("fim");
       return { id, tipo, perguntas: [novaPerguntaRamificada(p2.id), p2] };
     }
+    case "imagem":
+      // Sem arquivo: o autor escolhe a imagem (a validação cobra).
+      return { id, tipo, arquivo: "", alt: "", legenda: "", decorativa: false };
     case "categorizar":
       // Itens sem categoria: o autor escolhe (a validação cobra).
       return { id, tipo, enunciado: "", categorias: ["", ""], itens: [novoItemCategorizar(), novoItemCategorizar()] };

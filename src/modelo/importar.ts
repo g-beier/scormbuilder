@@ -26,6 +26,9 @@ import type {
 
 type Obj = Record<string, unknown>;
 
+/** Marca `<img …>` dentro de um campo HTML (removida pelo sanitizador). */
+const RE_IMG = /<img\b[^>]*>/gi;
+
 export interface ResultadoImportacao {
   projeto: Projeto;
   avisos: string[];
@@ -346,6 +349,8 @@ const CAMPOS_BLOCO: Record<TipoBloco, readonly string[]> = {
   escolha: ["pergunta", "opcoes"],
   ramificado: ["perguntas"],
   categorizar: ["enunciado", "categorias", "itens", "msgAcerto", "msgRevisar"],
+  // `src` não entra no projeto (ver o case "imagem"): fica em extras
+  imagem: ["alt", "legenda", "decorativa"],
 };
 
 function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
@@ -444,6 +449,19 @@ function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
       if (msgAcerto !== undefined) c.msgAcerto = msgAcerto;
       if (msgRevisar !== undefined) c.msgRevisar = msgRevisar;
       b = c;
+      break;
+    }
+    case "imagem": {
+      // O data.js não traz o arquivo da imagem: o bloco volta sem imagem escolhida
+      // (a validação cobra) e o endereço original fica guardado em extras.
+      const decorativa = l.bOpc("decorativa");
+      b = { id, tipo, arquivo: "", alt: l.s("alt"), legenda: l.s("legenda"), decorativa: decorativa === true };
+      const src = o.src;
+      av.push(
+        typeof src === "string" && src
+          ? `${onde}: a imagem “${src}” não vem junto com o data.js. Escolha o arquivo de novo no bloco “Imagem”.`
+          : `${onde}: o bloco “Imagem” veio sem arquivo. Escolha a imagem no bloco “Imagem”.`,
+      );
       break;
     }
   }
@@ -560,13 +578,26 @@ export function importarConteudo(bruto: unknown, meta?: Partial<Meta>, pasta?: s
   });
 
   // Campos ricos: só a marcação que o editor e o motor aceitam (ver sanitizar.ts).
+  // Imagens dentro do texto (`<img>`) saem também; as marcas originais ficam
+  // em `extras.imagensRemovidas` da tela, com um aviso próprio.
   let limpos = 0;
-  const limpar = (html: string) => {
-    const r = limparHtmlDetalhado(html);
-    if (r.removeu) limpos++;
-    return r.html;
-  };
-  const slides = lidos.map((s) => limparSlide(s, limpar));
+  const slides = lidos.map((s, i) => {
+    const imgs: string[] = [];
+    const limpo = limparSlide(s, (html: string) => {
+      const r = limparHtmlDetalhado(html);
+      if (r.removeu) {
+        limpos++;
+        if (typeof html === "string") imgs.push(...(html.match(RE_IMG) ?? []));
+      }
+      return r.html;
+    });
+    if (!imgs.length) return limpo;
+    avisos.push(
+      `Tela ${i + 1}: ${imgs.length === 1 ? "havia uma imagem" : `havia ${imgs.length} imagens`} dentro do texto, que o editor não aceita; ${imgs.length === 1 ? "ela foi removida" : "elas foram removidas"}. Para mostrar uma imagem, adicione um bloco “Imagem” e escolha o arquivo.`,
+    );
+    const extras = { ...(limpo.extras ?? {}), imagensRemovidas: imgs };
+    return { ...limpo, extras };
+  });
   if (limpos) {
     avisos.push(
       limpos === 1
