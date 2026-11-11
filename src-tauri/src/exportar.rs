@@ -16,6 +16,7 @@
 //!   `CARGO_MANIFEST_DIR/../runtime` (a pasta do repositório, sempre atual),
 //!   com o `resource_dir` como reserva.
 
+use crate::imagens;
 use crate::projetos::gravar_atomico;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -38,6 +39,15 @@ pub struct EntradaExportacao {
     pub nome_pacote: String,
     pub titulo: String,
     pub data_js: String,
+    /// Id do projeto (rascunho) de onde vêm as imagens. Obrigatório se
+    /// `imagens` não estiver vazia.
+    #[serde(default)]
+    pub projeto_id: Option<String>,
+    /// Imagens a copiar de `<app_data>/rascunhos/<projetoId>/img/` para
+    /// `img/` do pacote (nomes `<hash>.<ext>`). Toda `img/...` citada no
+    /// `data.js` (campo `src`) precisa estar aqui.
+    #[serde(default)]
+    pub imagens: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -213,13 +223,81 @@ pub fn gerar_manifesto(nome_pacote: &str, titulo: &str, arquivos: &[String]) -> 
     )
 }
 
+// ---------- Imagens ----------
+
+/// Nomes citados como `"src": "img/<nome>"` no `data.js` (na ordem, sem
+/// repetição). O compilador gera JSON, então basta procurar a chave `src`.
+pub fn imagens_citadas(data_js: &str) -> Vec<String> {
+    let mut saida: Vec<String> = Vec::new();
+    let mut resto = data_js;
+    while let Some(i) = resto.find("\"src\"") {
+        resto = &resto[i + 5..];
+        let depois = resto.trim_start();
+        let Some(depois) = depois.strip_prefix(':') else { continue };
+        let Some(valor) = depois.trim_start().strip_prefix('"') else { continue };
+        let Some(fim) = valor.find('"') else { break };
+        if let Some(nome) = valor[..fim].strip_prefix("img/")
+            && !saida.iter().any(|n| n == nome)
+        {
+            saida.push(nome.to_string());
+        }
+    }
+    saida
+}
+
+/// Confere as imagens pedidas e devolve `(nome, caminho de origem)`.
+/// Erros: nome inválido, projeto sem id, imagem ausente do rascunho e
+/// imagem citada no `data.js` que não veio na lista.
+fn imagens_da_entrada(base: &Path, entrada: &EntradaExportacao) -> Result<Vec<(String, PathBuf)>, String> {
+    let mut nomes: Vec<&str> = Vec::new();
+    for n in &entrada.imagens {
+        imagens::validar_nome_imagem(n)?;
+        if !nomes.contains(&n.as_str()) {
+            nomes.push(n);
+        }
+    }
+    for citada in imagens_citadas(&entrada.data_js) {
+        if !nomes.contains(&citada.as_str()) {
+            return Err(format!(
+                "O conteúdo usa a imagem img/{citada}, mas ela não foi enviada para o pacote."
+            ));
+        }
+    }
+    if nomes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let id = entrada
+        .projeto_id
+        .as_deref()
+        .ok_or_else(|| "O pacote usa imagens, mas veio sem a identificação do projeto.".to_string())?;
+    let pasta = imagens::pasta_imagens(base, id)?;
+    nomes
+        .into_iter()
+        .map(|n| {
+            let origem = pasta.join(n);
+            if origem.is_file() {
+                Ok((n.to_string(), origem))
+            } else {
+                Err(format!(
+                    "A imagem {n} usada no conteúdo não foi encontrada no rascunho. Escolha a imagem de novo no bloco Imagem."
+                ))
+            }
+        })
+        .collect()
+}
+
 // ---------- Montagem ----------
 
 /// Monta o pacote em `destino` (criada se faltar; deve estar vazia ou não
 /// existir). Copia `index.html`, `css/`, `js/` e `fonts/` do runtime (sem
 /// ocultos, sem `test/`, sem `ORIGEM.md`, sem um `js/data.js` antigo), grava
 /// `js/data.js`, troca `{{TITULO}}` no `index.html` e gera o manifesto.
-pub fn montar_pacote_em(runtime: &Path, destino: &Path, entrada: &EntradaExportacao) -> Result<PacoteMontado, String> {
+pub fn montar_pacote_em(
+    runtime: &Path,
+    base: &Path,
+    destino: &Path,
+    entrada: &EntradaExportacao,
+) -> Result<PacoteMontado, String> {
     validar_nome_pacote(&entrada.nome_pacote)?;
     if entrada.titulo.trim().is_empty() {
         return Err("O pacote está sem título.".to_string());
@@ -234,6 +312,8 @@ pub fn montar_pacote_em(runtime: &Path, destino: &Path, entrada: &EntradaExporta
             ));
         }
     }
+
+    let imagens = imagens_da_entrada(base, entrada)?;
 
     // Arquivos do runtime a copiar.
     let mut copiar = Vec::new();
@@ -269,6 +349,10 @@ pub fn montar_pacote_em(runtime: &Path, destino: &Path, entrada: &EntradaExporta
         gravar(rel, &conteudo)?;
     }
     gravar("js/data.js", entrada.data_js.as_bytes())?;
+    for (nome, origem) in &imagens {
+        let conteudo = fs::read(origem).map_err(|e| erro_io(&format!("ler a imagem {nome}"), &e))?;
+        gravar(&format!("img/{nome}"), &conteudo)?;
+    }
 
     let manifesto = gerar_manifesto(&entrada.nome_pacote, entrada.titulo.trim(), &gravados);
     fs::write(destino.join(MANIFESTO), manifesto.as_bytes())
@@ -341,13 +425,22 @@ pub fn validar_pacote_em(pasta: &Path) -> Vec<String> {
             problemas.push(format!("Arquivo do pacote não listado no manifesto: {a}"));
         }
     }
+    if let Ok(data_js) = fs::read_to_string(pasta.join("js").join("data.js")) {
+        for nome in imagens_citadas(&data_js) {
+            let ok = imagens::validar_nome_imagem(&nome).is_ok()
+                && pasta.join("img").join(&nome).is_file();
+            if !ok {
+                problemas.push(format!("Imagem citada no conteúdo não existe no pacote: img/{nome}"));
+            }
+        }
+    }
     problemas
 }
 
 // ---------- Zip ----------
 
 /// Data/hora atual (UTC) no formato do zip; 1980-01-01 se não der.
-fn agora_zip() -> zip::DateTime {
+pub(crate) fn agora_zip() -> zip::DateTime {
     let segs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -453,8 +546,13 @@ fn ja_existe(mensagem: String) -> String {
     format!("{PREFIXO_JA_EXISTE}{mensagem}")
 }
 
-fn montar_e_validar(runtime: &Path, pasta: &Path, entrada: &EntradaExportacao) -> Result<PacoteMontado, String> {
-    let montado = montar_pacote_em(runtime, pasta, entrada)?;
+fn montar_e_validar(
+    runtime: &Path,
+    base: &Path,
+    pasta: &Path,
+    entrada: &EntradaExportacao,
+) -> Result<PacoteMontado, String> {
+    let montado = montar_pacote_em(runtime, base, pasta, entrada)?;
     let problemas = validar_pacote_em(pasta);
     if problemas.is_empty() {
         Ok(montado)
@@ -472,6 +570,7 @@ fn montar_e_validar(runtime: &Path, pasta: &Path, entrada: &EntradaExportacao) -
 /// lugar com a antiga, para nunca deixar um pacote pela metade.
 pub fn exportar_em(
     runtime: &Path,
+    base: &Path,
     entrada: &EntradaExportacao,
     destino: &Path,
     formato: Formato,
@@ -499,7 +598,7 @@ pub fn exportar_em(
             }
             let tmp = Temporaria::em(destino, &format!(".{nome}.montando"))
                 .map_err(|e| erro_io("preparar a pasta do pacote", &e))?;
-            let montado = montar_e_validar(runtime, &tmp.0, entrada)?;
+            let montado = montar_e_validar(runtime, base, &tmp.0, entrada)?;
             if alvo.exists() {
                 let antiga = Temporaria::em(destino, &format!(".{nome}.antigo"))
                     .map_err(|e| erro_io("preparar a substituição", &e))?;
@@ -536,7 +635,7 @@ pub fn exportar_em(
             let tmp = Temporaria::em(&std::env::temp_dir(), "scorm-builder-exportar")
                 .map_err(|e| erro_io("preparar a pasta temporária", &e))?;
             let pasta = tmp.0.join(nome);
-            let montado = montar_e_validar(runtime, &pasta, entrada)?;
+            let montado = montar_e_validar(runtime, base, &pasta, entrada)?;
             let bytes = zipar_em(&pasta, &alvo)?;
             Ok(ResultadoExportacao {
                 caminho: alvo.to_string_lossy().into_owned(),
@@ -615,7 +714,8 @@ pub async fn exportar_pacote(
     sobrescrever: bool,
 ) -> Result<ResultadoExportacao, String> {
     let runtime = pasta_runtime(&app)?;
-    em_segundo_plano(move || exportar_em(&runtime, &entrada, Path::new(&destino), formato, sobrescrever)).await
+    let base = app_data(&app)?;
+    em_segundo_plano(move || exportar_em(&runtime, &base, &entrada, Path::new(&destino), formato, sobrescrever)).await
 }
 
 #[tauri::command]
@@ -665,7 +765,14 @@ mod testes {
             nome_pacote: "CTGESTAO_UD11_LEITURA2".into(),
             titulo: TITULO.into(),
             data_js: "/* gerado pelo SCORM Builder */\nwindow.CONTEUDO = {\"formato\":2,\"id\":\"CTGESTAO_UD11_LEITURA2\",\"contexto\":\"Curso · UD 11\",\"titulo\":\"Gestão\",\"slides\":[{\"id\":\"s-1\",\"tipo\":\"capa\",\"kicker\":\"K\",\"titulo\":\"T\",\"sub\":\"S\"},{\"id\":\"s-2\",\"tipo\":\"fim\",\"titulo\":\"Fim\",\"texto\":\"Ok\"}]};\n".into(),
+            projeto_id: None,
+            imagens: Vec::new(),
         }
+    }
+
+    /// Base de dados sem rascunhos (pacotes sem imagem não a leem).
+    fn sem_base() -> PathBuf {
+        std::env::temp_dir().join("scorm-builder-sem-base-inexistente")
     }
 
     fn arquivos_da_pasta(p: &Path) -> Vec<String> {
@@ -680,7 +787,7 @@ mod testes {
     fn manifesto_escapa_titulo_e_lista_todos_os_arquivos() {
         let t = PastaTemp::nova();
         let pasta = t.0.join("P");
-        let m = montar_pacote_em(&runtime(), &pasta, &entrada()).unwrap();
+        let m = montar_pacote_em(&runtime(), &sem_base(), &pasta, &entrada()).unwrap();
         let xml = fs::read_to_string(pasta.join(MANIFESTO)).unwrap();
         assert!(xml.contains("<title>Gestão &amp; ação: &lt;UEL&gt; &quot;jurídica&quot;</title>"));
         let doc = roxmltree::Document::parse(&xml).unwrap();
@@ -731,7 +838,7 @@ mod testes {
     fn validacao_detecta_faltando_nao_listado_oculto_e_xml_invalido() {
         let t = PastaTemp::nova();
         let pasta = t.0.join("P");
-        montar_pacote_em(&runtime(), &pasta, &entrada()).unwrap();
+        montar_pacote_em(&runtime(), &sem_base(), &pasta, &entrada()).unwrap();
 
         fs::remove_file(pasta.join("js/scorm.js")).unwrap();
         fs::write(pasta.join("extra.txt"), "x").unwrap();
@@ -772,7 +879,7 @@ mod testes {
         fs::write(rt.join("test/x.mjs"), "x").unwrap();
 
         let pasta = t.0.join("P");
-        montar_pacote_em(&rt, &pasta, &entrada()).unwrap();
+        montar_pacote_em(&rt, &sem_base(), &pasta, &entrada()).unwrap();
         let lista = arquivos_da_pasta(&pasta);
         assert!(!lista.iter().any(|a| a.split('/').any(|p| p.starts_with('.'))), "{lista:?}");
         assert!(!lista.iter().any(|a| a.starts_with("test/") || a == "ORIGEM.md"));
@@ -784,7 +891,7 @@ mod testes {
     fn zip_tem_manifesto_na_raiz_sem_pasta_extra_e_sem_ocultos() {
         let t = PastaTemp::nova();
         let pasta = t.0.join("CTGESTAO_UD11_LEITURA2");
-        let m = montar_pacote_em(&runtime(), &pasta, &entrada()).unwrap();
+        let m = montar_pacote_em(&runtime(), &sem_base(), &pasta, &entrada()).unwrap();
         fs::write(pasta.join(".DS_Store"), "x").unwrap();
         let zip = t.0.join("saida.zip");
         let bytes = zipar_em(&pasta, &zip).unwrap();
@@ -823,8 +930,8 @@ mod testes {
         let t = PastaTemp::nova();
         let mut e = entrada();
         e.nome_pacote = "../FORA".into();
-        assert!(exportar_em(&runtime(), &e, &t.0, Formato::Pasta, true).is_err());
-        assert!(montar_pacote_em(&runtime(), &t.0.join("P"), &e).is_err());
+        assert!(exportar_em(&runtime(), &sem_base(), &e, &t.0, Formato::Pasta, true).is_err());
+        assert!(montar_pacote_em(&runtime(), &sem_base(), &t.0.join("P"), &e).is_err());
         assert!(!t.0.join("P").exists());
         assert!(fs::read_dir(&t.0).unwrap().next().is_none());
     }
@@ -832,7 +939,7 @@ mod testes {
     #[test]
     fn exportar_pasta_ja_existe_e_sobrescrita_segura() {
         let t = PastaTemp::nova();
-        let r = exportar_em(&runtime(), &entrada(), &t.0, Formato::Pasta, false).unwrap();
+        let r = exportar_em(&runtime(), &sem_base(), &entrada(), &t.0, Formato::Pasta, false).unwrap();
         let alvo = t.0.join("CTGESTAO_UD11_LEITURA2");
         assert_eq!(r.caminho, alvo.to_string_lossy());
         assert_eq!(r.arquivos, arquivos_da_pasta(&alvo).len());
@@ -840,20 +947,20 @@ mod testes {
 
         // De novo sem sobrescrever: erro identificável e nada muda.
         fs::write(alvo.join("marca.txt"), "antigo").unwrap();
-        let erro = exportar_em(&runtime(), &entrada(), &t.0, Formato::Pasta, false).unwrap_err();
+        let erro = exportar_em(&runtime(), &sem_base(), &entrada(), &t.0, Formato::Pasta, false).unwrap_err();
         assert!(erro.starts_with(PREFIXO_JA_EXISTE), "{erro}");
         assert!(alvo.join("marca.txt").exists());
 
         // Falha na montagem (data.js inválido) com sobrescrever: a pasta antiga fica intacta.
         let mut ruim = entrada();
         ruim.data_js = "lixo".into();
-        assert!(exportar_em(&runtime(), &ruim, &t.0, Formato::Pasta, true).is_err());
+        assert!(exportar_em(&runtime(), &sem_base(), &ruim, &t.0, Formato::Pasta, true).is_err());
         assert!(alvo.join("marca.txt").exists());
 
         // Sobrescreve: pacote novo completo, sem sobras nem temporários.
         let mut nova = entrada();
         nova.titulo = "Título novo".into();
-        exportar_em(&runtime(), &nova, &t.0, Formato::Pasta, true).unwrap();
+        exportar_em(&runtime(), &sem_base(), &nova, &t.0, Formato::Pasta, true).unwrap();
         assert!(!alvo.join("marca.txt").exists());
         assert!(fs::read_to_string(alvo.join("index.html")).unwrap().contains("Título novo"));
         assert!(validar_pacote_em(&alvo).is_empty());
@@ -867,15 +974,15 @@ mod testes {
     #[test]
     fn exportar_zip_ja_existe_e_sobrescreve() {
         let t = PastaTemp::nova();
-        let r = exportar_em(&runtime(), &entrada(), &t.0, Formato::Zip, false).unwrap();
+        let r = exportar_em(&runtime(), &sem_base(), &entrada(), &t.0, Formato::Zip, false).unwrap();
         let alvo = t.0.join("CTGESTAO_UD11_LEITURA2.zip");
         assert_eq!(r.caminho, alvo.to_string_lossy());
         assert_eq!(r.bytes, fs::metadata(&alvo).unwrap().len());
         assert_eq!(conferir_zip(&alvo).unwrap().len(), r.arquivos);
 
-        let erro = exportar_em(&runtime(), &entrada(), &t.0, Formato::Zip, false).unwrap_err();
+        let erro = exportar_em(&runtime(), &sem_base(), &entrada(), &t.0, Formato::Zip, false).unwrap_err();
         assert!(erro.starts_with(PREFIXO_JA_EXISTE));
-        exportar_em(&runtime(), &entrada(), &t.0, Formato::Zip, true).unwrap();
+        exportar_em(&runtime(), &sem_base(), &entrada(), &t.0, Formato::Zip, true).unwrap();
         let nomes: Vec<_> = fs::read_dir(&t.0)
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
@@ -883,10 +990,104 @@ mod testes {
         assert_eq!(nomes, vec!["CTGESTAO_UD11_LEITURA2.zip"]);
 
         assert!(
-            exportar_em(&runtime(), &entrada(), &t.0.join("nao-existe"), Formato::Zip, false)
+            exportar_em(&runtime(), &sem_base(), &entrada(), &t.0.join("nao-existe"), Formato::Zip, false)
                 .unwrap_err()
                 .contains("destino não foi encontrada")
         );
+    }
+
+    fn entrada_com_imagem(base: &Path) -> (EntradaExportacao, String) {
+        let png = crate::imagens::testes::png(800, 600, 3);
+        let arq = base.join("foto.png");
+        fs::create_dir_all(base).unwrap();
+        fs::write(&arq, &png).unwrap();
+        let nome = imagens::importar_imagem_em(base, "proj-1", &arq).unwrap().nome;
+        let mut e = entrada();
+        e.data_js = e.data_js.replace(
+            "{\"id\":\"s-2\",\"tipo\":\"fim\"",
+            &format!(
+                "{{\"id\":\"s-3\",\"tipo\":\"conteudo\",\"kicker\":\"K\",\"titulo\":\"T\",\"blocos\":[{{\"id\":\"b-1\",\"tipo\":\"imagem\",\"src\":\"img/{nome}\",\"alt\":\"Foto\"}}]}},{{\"id\":\"s-2\",\"tipo\":\"fim\""
+            ),
+        );
+        assert!(e.data_js.contains(&format!("img/{nome}")));
+        e.projeto_id = Some("proj-1".into());
+        e.imagens = vec![nome.clone()];
+        (e, nome)
+    }
+
+    #[test]
+    fn imagens_citadas_no_data_js() {
+        let js = r#"window.CONTEUDO = {"a":{"src":"img/0123456789abcdef.png"},"b":{"src" : "img/fedcba9876543210.webp"},"c":{"src":"https://x/y.png"},"d":{"src":"img/0123456789abcdef.png"},"texto":"\"src\": isto é texto"};"#;
+        assert_eq!(
+            imagens_citadas(js),
+            vec!["0123456789abcdef.png", "fedcba9876543210.webp"]
+        );
+        assert!(imagens_citadas(&entrada().data_js).is_empty());
+    }
+
+    #[test]
+    fn exportar_copia_as_imagens_para_o_pacote() {
+        let t = PastaTemp::nova();
+        let base = t.0.join("dados");
+        let (e, nome) = entrada_com_imagem(&base);
+        let saida = t.0.join("saida");
+        fs::create_dir_all(&saida).unwrap();
+
+        let r = exportar_em(&runtime(), &base, &e, &saida, Formato::Pasta, false).unwrap();
+        let pasta = PathBuf::from(&r.caminho);
+        let rel = format!("img/{nome}");
+        assert_eq!(
+            fs::read(caminho_rel(&pasta, &rel)).unwrap(),
+            fs::read(base.join("rascunhos/proj-1/img").join(&nome)).unwrap()
+        );
+        let xml = fs::read_to_string(pasta.join(MANIFESTO)).unwrap();
+        assert!(xml.contains(&format!("<file href=\"{rel}\"/>")));
+        assert!(validar_pacote_em(&pasta).is_empty());
+
+        let z = exportar_em(&runtime(), &base, &e, &saida, Formato::Zip, false).unwrap();
+        assert!(conferir_zip(Path::new(&z.caminho)).unwrap().contains(&rel));
+
+        // A validação acusa imagem citada que sumiu do pacote.
+        fs::remove_file(caminho_rel(&pasta, &rel)).unwrap();
+        let p = validar_pacote_em(&pasta);
+        assert!(p.iter().any(|x| x.contains(&format!("Imagem citada no conteúdo não existe no pacote: {rel}"))), "{p:?}");
+    }
+
+    #[test]
+    fn exportar_com_imagem_faltando_e_erro() {
+        let t = PastaTemp::nova();
+        let base = t.0.join("dados");
+        let (e, nome) = entrada_com_imagem(&base);
+        let saida = t.0.join("saida");
+        fs::create_dir_all(&saida).unwrap();
+
+        // Imagem citada e ausente do rascunho.
+        fs::remove_file(base.join("rascunhos/proj-1/img").join(&nome)).unwrap();
+        let erro = exportar_em(&runtime(), &base, &e, &saida, Formato::Pasta, false).unwrap_err();
+        assert!(erro.contains(&nome) && erro.contains("não foi encontrada no rascunho"), "{erro}");
+        assert!(fs::read_dir(&saida).unwrap().next().is_none(), "não pode sobrar pacote pela metade");
+
+        // Imagem citada no data.js, mas fora da lista enviada.
+        let (mut e2, nome2) = entrada_com_imagem(&base);
+        e2.imagens.clear();
+        let erro = exportar_em(&runtime(), &base, &e2, &saida, Formato::Zip, false).unwrap_err();
+        assert!(erro.contains(&format!("img/{nome2}")) && erro.contains("não foi enviada"), "{erro}");
+
+        // Lista com imagem, mas sem o id do projeto.
+        let (mut e3, _) = entrada_com_imagem(&base);
+        e3.projeto_id = None;
+        assert!(exportar_em(&runtime(), &base, &e3, &saida, Formato::Pasta, false)
+            .unwrap_err()
+            .contains("identificação do projeto"));
+
+        // Nome inválido (path traversal) e id inválido.
+        let (mut e4, _) = entrada_com_imagem(&base);
+        e4.imagens.push("../../etc/passwd".into());
+        assert!(exportar_em(&runtime(), &base, &e4, &saida, Formato::Pasta, false).unwrap_err().contains("inválido"));
+        let (mut e5, _) = entrada_com_imagem(&base);
+        e5.projeto_id = Some("../fora".into());
+        assert!(exportar_em(&runtime(), &base, &e5, &saida, Formato::Pasta, false).unwrap_err().contains("Identificador"));
+        assert!(fs::read_dir(&saida).unwrap().next().is_none());
     }
 
     #[test]
@@ -920,9 +1121,11 @@ mod testes {
             nome_pacote: nome,
             titulo,
             data_js: fs::read_to_string(data_js).unwrap(),
+            projeto_id: None,
+            imagens: Vec::new(),
         };
-        let p = exportar_em(&runtime(), &e, &saida, Formato::Pasta, true).unwrap();
-        let z = exportar_em(&runtime(), &e, &saida, Formato::Zip, true).unwrap();
+        let p = exportar_em(&runtime(), &sem_base(), &e, &saida, Formato::Pasta, true).unwrap();
+        let z = exportar_em(&runtime(), &sem_base(), &e, &saida, Formato::Zip, true).unwrap();
         assert!(validar_pacote_em(Path::new(&p.caminho)).is_empty());
         println!("PASTA {} {} arquivos {} bytes", p.caminho, p.arquivos, p.bytes);
         println!("ZIP {} {} arquivos {} bytes", z.caminho, z.arquivos, z.bytes);
