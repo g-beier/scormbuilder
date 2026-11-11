@@ -6,7 +6,7 @@ Os arquivos usados como fonte estavam sem alterações locais naquele checkout.
 
 | Arquivo | Fonte | Mudanças |
 |---|---|---|
-| `css/tema.css` | `CTGESTAO_UD18_LEITURA2/css/tema.css` | cópia exata até a linha do `.source a`; depois dela, só regras novas dos blocos do kit (M6), vindas de `base/scorm-kit/css/kit.css` |
+| `css/tema.css` | `CTGESTAO_UD18_LEITURA2/css/tema.css` | cópia exata até a linha do `.source a`, com os valores fixos trocados por tokens do `:root` (M13, abaixo); depois dela, só regras novas dos blocos do kit (M6), vindas de `base/scorm-kit/css/kit.css` |
 | `fonts/*` | `base/scorm-kit/fonts/` | nenhuma (woff2 + licenças OFL) |
 | `js/scorm.js` | `base/scorm-kit/js/scorm.js` (igual ao `js/scorm.js` da UD18) | `Scorm.init(chave)`: a chave do localStorage passa a ser configurável (o padrão antigo `scorm_estudo_caso_protecao` só vale se nenhuma chave for passada) |
 | `js/motor.js` | `CTGESTAO_UD18_LEITURA2/js/app.js` + `base/scorm-kit/js/kit.js` (`quiz`, `reflexao`, `escolha`) | refatorado no motor v2 (abaixo) |
@@ -59,3 +59,16 @@ Portado do `CTGESTAO_UD11_QUIZ/js/app.js` (caminho pelas respostas, `proxima` po
 - Retomada: volta para a primeira pergunta sem resposta do caminho, ou para o resumo. Um destino inválido ou um ciclo encerram o caminho em vez de travar (o editor impede os dois).
 
 Teste: `node runtime/test/ramificado.mjs "$TMPDIR"cev-m6` (fixture `test/fixtures/ramificado-v2.data.js`).
+
+## Tokens do tema (M13, passo 1)
+
+O `css/tema.css` passou a ter todo valor de aparência como variável em `:root`, com os **mesmos valores computados** (o tema CEV aprovado não muda). O texto depois do `:root` deixou de ser cópia literal da UD18: resolvendo cada `var()` pelo valor do `:root`, ele volta a ser idêntico ao original, com duas exceções sem efeito visual: `background: #fff` virou `var(--branco)` (`#ffffff`, a mesma cor) e o `border-radius: 999px` do `.ram-num` virou `var(--raio-pilula)` (99px; com a altura de ~25px o canto é reduzido à metade da altura nos dois casos, então o desenho é o mesmo).
+
+- Novos tokens: `--fonte-texto`, `--fonte-titulos` (`--titulos` fica como alias), `--peso-titulos`, `--texto-base`, `--raio-controle`, `--raio-pilula`, `--raio-modal`, `--raio-aviso`, `--raio-aba`, `--sobre-cor`, `--campo-travado`, `--navy-tinta-hover`, `--verde-tinta-hover`, `--amarelo-tinta-hover`, `--barra-trilho`, `--veu`, `--foco-halo`, `--sombra`, `--sombra-forte`.
+- Ficaram fixos de propósito: `border-radius: 50%` (círculo é forma, não tema) e a cor da alça do `.drag-card::before`, que está dentro de um SVG em `data:` (`fill='%235b5d73'`, igual a `--tinta-suave`) e não aceita `var()`. Um tema que mude `--tinta-suave` precisa gerar a regra `.drag-card::before` com o SVG recolorido.
+- `--texto-base` muda só o `font-size` do `body` (e o que é relativo a ele em `em`); os tamanhos em `rem` seguem o `html` e os em `px` são fixos.
+- Sem `--espaco`: a densidade exigiria `calc(var(--espaco) * Npx)` em dezenas de declarações de espaçamento (e `var()` dentro de `calc()` tem falhas em navegadores antigos). Fica para o CSS gerado pelo tema sobrescrever um conjunto escolhido de regras.
+- Sem `color-mix()`, sem `var()` com valor reserva e sem CSS novo: as cores derivadas de um tema vêm prontas do compilador.
+- `motor.js` não tem cor inline (só `transform`, `transition`, `visibility`, `z-index` e a largura da barra), então não mudou.
+
+Teste: `runtime/test/tema-tokens.test.mjs` (roda no `npm test`) confere a lista exata de tokens e valores do tema CEV e falha se aparecer cor hex/rgb/hsl, `border-radius` em px, `font-family` literal ou sombra com cor fixa fora do `:root`.
