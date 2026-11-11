@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, resolve, sep } from "node:path";
@@ -80,7 +81,11 @@ export default defineConfig(() => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/.claude/**"],
     },
+  },
+  // Worktrees de agentes (.claude/worktrees) têm cópias antigas dos testes.
+  test: {
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
   },
 }));

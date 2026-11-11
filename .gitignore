@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 default.profraw
 .vitest/
+
+# Worktrees temporárias de agentes
+.claude/worktrees/
