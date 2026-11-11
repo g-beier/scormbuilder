@@ -529,6 +529,53 @@ var Motor = (function () {
     render: function (b) { return b.html ? el("p", "source", b.html) : null; }
   });
 
+  // ---------- Imagem (M9): passiva, sem pendência e sem estado ----------
+  // src aceito: arquivo da pasta img/ do pacote (sem subpastas, sem "..") ou, para a prévia
+  // do editor, uma imagem embutida em data: (png, jpeg, webp, gif; svg em data: não).
+  var SRC_PACOTE = /^img\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(png|jpe?g|webp|gif|svg)$/i;
+  var SRC_DADOS = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+\/=]+$/;
+
+  function srcImagemOk(src) {
+    return typeof src === "string" && (SRC_PACOTE.test(src) || SRC_DADOS.test(src));
+  }
+
+  bloco("imagem", {
+    render: function (b) {
+      if (!srcImagemOk(b.src)) {
+        var p = el("p", "nota");
+        p.setAttribute("role", "note");
+        p.textContent = "[Imagem não exibida: o arquivo precisa estar na pasta img/ do pacote.]";
+        return p;
+      }
+      var decorativa = b.decorativa === true;
+      var alt = decorativa ? "" : String(b.alt || "");
+      var fig = el("figure", "figura");
+      var img = document.createElement("img");
+      img.setAttribute("alt", alt);
+      if (decorativa) img.setAttribute("role", "presentation");
+      img.setAttribute("loading", "lazy");
+      img.setAttribute("decoding", "async");
+      img.draggable = false;
+      img.addEventListener("error", function () {
+        img.hidden = true;
+        if (decorativa) {
+          // Nada a dizer no lugar de uma imagem decorativa: some (a legenda, se houver, fica)
+          if (!b.legenda) fig.hidden = true;
+          return;
+        }
+        if (fig.querySelector(".img-falha")) return;
+        var cx = el("p", "img-falha");
+        cx.textContent = "Imagem não carregada" + (alt ? ": " + alt : ".");
+        fig.insertBefore(cx, img);
+      });
+      img.setAttribute("src", b.src);
+      fig.appendChild(img);
+      if (b.legenda) fig.appendChild(el("figcaption", null, b.legenda));
+      else if (decorativa) fig.setAttribute("aria-hidden", "true");
+      return fig;
+    }
+  });
+
   // ---------- Quiz de escolha única, com explicação ----------
   function aplicarQuiz(ui, escolha) {
     var q = ui.q, btns = ui.btns, fb = ui.fb;
