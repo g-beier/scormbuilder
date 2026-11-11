@@ -1,4 +1,5 @@
 mod exportar;
+mod imagens;
 mod pdf;
 mod projetos;
 
@@ -15,6 +16,9 @@ pub fn run() {
             projetos::salvar_arquivo,
             projetos::abrir_arquivo,
             projetos::ler_data_js,
+            imagens::importar_imagem,
+            imagens::ler_imagem,
+            imagens::limpar_imagens_orfas,
             exportar::exportar_pacote,
             exportar::ler_preferencias,
             exportar::salvar_preferencias,

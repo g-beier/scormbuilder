@@ -7,6 +7,7 @@
 //! A lógica fica em funções que recebem o diretório base, para poder ser
 //! testada com uma pasta temporária; os comandos só resolvem `app_data_dir`.
 
+use crate::imagens;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
@@ -206,13 +207,19 @@ pub fn abrir_rascunho_em(base: &Path, id: &str) -> Result<Value, String> {
     ler_projeto(&caminho, "abrir o rascunho")
 }
 
-/// Exclui o rascunho. Se ele já não existir, não é erro.
+/// Exclui o rascunho (`<id>.json`) e a pasta de mídia (`<id>/`). Se já não
+/// existirem, não é erro.
 pub fn excluir_rascunho_em(base: &Path, id: &str) -> Result<(), String> {
     let caminho = caminho_rascunho(base, id)?;
     match fs::remove_file(&caminho) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(erro_io("excluir o rascunho", &e)),
+    }
+    match fs::remove_dir_all(imagens::pasta_do_rascunho(base, id)?) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(erro_io("excluir o rascunho", &e)),
+        Err(e) => Err(erro_io("excluir as imagens do rascunho", &e)),
     }
 }
 
@@ -436,8 +443,17 @@ mod testes {
             }
         );
         assert_eq!(abrir_rascunho_em(&t.0, "abc-123").unwrap(), p);
+        // Mídia do rascunho em <id>/img/: a listagem a ignora e a exclusão apaga.
+        let img = t.0.join("rascunhos/abc-123/img");
+        fs::create_dir_all(&img).unwrap();
+        fs::write(img.join("0123456789abcdef.png"), b"x").unwrap();
+        salvar_rascunho_em(&t.0, &projeto("outro", "2026-01-01T00:00:00.000Z")).unwrap();
+        fs::create_dir_all(t.0.join("rascunhos/outro/img")).unwrap();
+        assert_eq!(listar_rascunhos_em(&t.0).len(), 2);
         excluir_rascunho_em(&t.0, "abc-123").unwrap();
         assert!(abrir_rascunho_em(&t.0, "abc-123").is_err());
+        assert!(!t.0.join("rascunhos/abc-123").exists());
+        assert!(t.0.join("rascunhos/outro/img").is_dir());
         excluir_rascunho_em(&t.0, "abc-123").unwrap(); // idempotente
     }
 
