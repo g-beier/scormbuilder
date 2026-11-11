@@ -95,7 +95,7 @@ const figs = (f) => f.$$eval(A + ".figura", (l) => l.map((fig) => {
     alt: img.getAttribute("alt"), role: img.getAttribute("role"), loading: img.getAttribute("loading"),
     src: img.getAttribute("src"), carregou: img.complete && img.naturalWidth > 0, imgVisivel: !img.hidden && r.height > 0,
     figHidden: fig.hidden, figAria: fig.getAttribute("aria-hidden"),
-    capHtml: cap ? cap.innerHTML : null, falha: fal ? fal.textContent : null,
+    capHtml: cap ? cap.innerHTML : null, falha: fal ? fal.textContent : null, falhaRole: fal ? fal.getAttribute("role") : null,
     w: Math.round(r.width), h: Math.round(r.height), raio: getComputedStyle(img).borderRadius,
   };
 }));
@@ -158,6 +158,7 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
     [false, null, false],
   ], `${W} erro de carga`);
   eq(fs2[2].capHtml, "Legenda que fica.", `${W} decorativa quebrada mantém a legenda`);
+  eq(fs2[0].falhaRole, "note", `${W} caixa .img-falha com role=note`);
   lay = await layout(f);
   ok(!lay.hs && !lay.pg, `${W} tela 4 sem rolagem horizontal/dupla`);
   ok(!(await nextDis(f)), `${W} erro de carga não bloqueia`);
@@ -169,7 +170,8 @@ for (const vp of [{ width: 1200, height: 666 }, { width: 375, height: 666 }]) {
   eq(fs2.length, 1, `${W} só a imagem data:image/png é aceita`);
   ok(fs2[0].carregou && /^data:image\/png;base64,/.test(fs2[0].src), `${W} data:image/png carregou`);
   eq(await f.$$eval(A + "p.nota[role=note]", (l) => l.map((n) => n.textContent)),
-    Array(7).fill("[Imagem não exibida: o arquivo precisa estar na pasta img/ do pacote.]"), `${W} endereços recusados`);
+    [...Array(5).fill("[Imagem não exibida: x]"), "[Imagem não exibida.]", "[Imagem não exibida.]"],
+    `${W} endereços recusados (com descrição; decorativa e sem descrição só avisam)`);
   ok(!pedidos.some((u) => /\/sub\/|\/a\.png/.test(u)), `${W} nenhum endereço recusado foi pedido`);
   lay = await layout(f);
   ok(!lay.hs && !lay.pg, `${W} tela 5 sem rolagem horizontal/dupla`);

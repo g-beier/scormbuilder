@@ -28,8 +28,8 @@ window.CONTEUDO = {
       { id: "b-x3", tipo: "imagem", alt: "x", src: "img/../js/data.js" },
       { id: "b-x4", tipo: "imagem", alt: "x", src: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" },
       { id: "b-x5", tipo: "imagem", alt: "x", src: "img/sub/a.png" },
-      { id: "b-x6", tipo: "imagem", alt: "x", src: "/img/a.png" },
-      { id: "b-x7", tipo: "imagem", alt: "x" }
+      { id: "b-x6", tipo: "imagem", alt: "x", src: "/img/a.png", decorativa: true },
+      { id: "b-x7", tipo: "imagem" }
     ] },
     { id: "s-quiz", tipo: "conteudo", kicker: "Junto", titulo: "Imagem e pergunta", blocos: [
       { id: "b-qi", tipo: "imagem", src: "img/paisagem.png", alt: "Faixas" },

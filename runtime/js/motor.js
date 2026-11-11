@@ -544,7 +544,11 @@ var Motor = (function () {
       if (!srcImagemOk(b.src)) {
         var p = el("p", "nota");
         p.setAttribute("role", "note");
-        p.textContent = "[Imagem não exibida: o arquivo precisa estar na pasta img/ do pacote.]";
+        var altRecusado = b.decorativa === true ? "" : String(b.alt || "").trim();
+        p.textContent = altRecusado ? "[Imagem não exibida: " + altRecusado + "]" : "[Imagem não exibida.]";
+        if (window.console && console.warn) {
+          console.warn("Motor: imagem não exibida; o endereço precisa ser img/<arquivo> do pacote:", String(b.src));
+        }
         return p;
       }
       var decorativa = b.decorativa === true;
@@ -565,6 +569,7 @@ var Motor = (function () {
         }
         if (fig.querySelector(".img-falha")) return;
         var cx = el("p", "img-falha");
+        cx.setAttribute("role", "note");
         cx.textContent = "Imagem não carregada" + (alt ? ": " + alt : ".");
         fig.insertBefore(cx, img);
       });
