@@ -221,7 +221,7 @@ export function Atualizacao({
         <div className="atualizacao-texto">
           {/* A região viva existe desde o início, para os leitores de tela anunciarem as mudanças. */}
           <p role="status" className={temAviso ? "atualizacao-frase" : "atualizacao-linha"}>
-            {fraseOculta ? <span className="visualmente-oculto">{frase}</span> : frase}
+            {fraseOculta ? <span className="so-leitor">{frase}</span> : frase}
           </p>
           {fase.tipo === "disponivel" && (
             <p>
