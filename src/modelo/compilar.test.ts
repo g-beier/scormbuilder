@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compilarConteudo, compilarDataJs, nomePacote, nomePacoteExibicao } from "./compilar";
 import { novoBloco, novoProjeto, novoSlide } from "./fabrica";
-import { avaliarDataJs, importarDataJs } from "./importar";
+import { avaliarDataJsDireto as avaliarDataJs, importarDataJsSemIsolamento as importarDataJs } from "./importar";
 import { desescaparHtml, escaparHtml } from "./texto";
 import type { BlocoConfira, BlocoOrdenar, BlocoQuiz, SlideConteudo } from "./tipos";
 

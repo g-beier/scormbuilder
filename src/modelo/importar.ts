@@ -1,4 +1,5 @@
 import { desescaparHtml } from "./texto";
+import { ErroImportacao, avaliarDataJsDireto, type Avaliador } from "./avaliar";
 import { novoId, metaVazia } from "./fabrica";
 import { normalizarSigla } from "./compilar";
 import type {
@@ -29,40 +30,8 @@ export interface ResultadoImportacao {
   avisos: string[];
 }
 
-export class ErroImportacao extends Error {}
-
-// ---------- Avaliação isolada ----------
-
-/** Nomes globais sombreados durante a avaliação do data.js. */
-const SOMBRAS = ["window", "self", "globalThis", "top", "parent", "frames", "document", "CONTEUDO"];
-
-/**
- * Executa o data.js com um `window` falso e devolve o CONTEUDO.
- * Aceita `window.CONTEUDO = …`, `var CONTEUDO = …` e `CONTEUDO = …`.
- * Os globais do app ficam sombreados (o código nunca vê o window real).
- * Não é um sandbox de segurança: serve para arquivos de conteúdo confiáveis.
- */
-export function avaliarDataJs(fonte: string): unknown {
-  const falso: Obj = {};
-  const corpoTexto = `"use strict";\n${fonte}\n;return (typeof CONTEUDO !== "undefined" && CONTEUDO) || window.CONTEUDO;`;
-  let corpo: (...args: unknown[]) => unknown;
-  try {
-    corpo = new Function(...SOMBRAS, corpoTexto) as (...args: unknown[]) => unknown;
-  } catch {
-    // `const/let CONTEUDO` colide com o parâmetro sombra: tenta sem ele.
-    try {
-      corpo = new Function(...SOMBRAS.slice(0, -1), corpoTexto) as (...args: unknown[]) => unknown;
-    } catch (e) {
-      throw new ErroImportacao(`O arquivo data.js tem um erro de sintaxe: ${(e as Error).message}`);
-    }
-  }
-  try {
-    // window, self, globalThis, top, parent, frames → o mesmo objeto falso
-    return corpo.call(undefined, falso, falso, falso, falso, falso, falso, undefined, undefined);
-  } catch (e) {
-    throw new ErroImportacao(`Não foi possível ler o data.js: ${(e as Error).message}`);
-  }
-}
+export { ErroImportacao, avaliarDataJsDireto } from "./avaliar";
+export type { Avaliador } from "./avaliar";
 
 // ---------- Utilitários ----------
 
@@ -543,13 +512,35 @@ function definidos(p: Partial<Meta>): Partial<Meta> {
 
 // ---------- Entrada ----------
 
+export interface OpcoesImportacao {
+  /** Quem executa o data.js. No app: `avaliarDataJsIsolado` (Web Worker). */
+  avaliar: Avaliador;
+  /** Valores explícitos (têm prioridade sobre o que for inferido). */
+  meta?: Partial<Meta>;
+  /** Nome (ou caminho) da pasta do pacote, ex. `CTGESTAO_UD11_LEITURA2`. */
+  pasta?: string;
+}
+
+/** Importa um data.js (legado LEITURA2 ou v2) como Projeto, executando-o com `avaliar`. */
+export async function importarDataJs(fonte: string, opcoes: OpcoesImportacao): Promise<ResultadoImportacao> {
+  const bruto = await opcoes.avaliar(fonte);
+  return importarConteudo(bruto, opcoes.meta, opcoes.pasta);
+}
+
 /**
- * Importa um data.js (legado LEITURA2 ou v2) como Projeto.
+ * Importação síncrona, **sem isolamento**: executa o data.js no contexto atual.
+ * Só para testes e ferramentas com arquivos confiáveis; o app usa `importarDataJs`.
+ */
+export function importarDataJsSemIsolamento(fonte: string, meta?: Partial<Meta>, pasta?: string): ResultadoImportacao {
+  return importarConteudo(avaliarDataJsDireto(fonte), meta, pasta);
+}
+
+/**
+ * Converte o CONTEUDO já avaliado (legado LEITURA2 ou v2) em Projeto.
  * @param meta  valores explícitos (têm prioridade sobre o que for inferido)
  * @param pasta nome (ou caminho) da pasta do pacote, ex. `CTGESTAO_UD11_LEITURA2`
  */
-export function importarDataJs(fonte: string, meta?: Partial<Meta>, pasta?: string): ResultadoImportacao {
-  const bruto = avaliarDataJs(fonte);
+export function importarConteudo(bruto: unknown, meta?: Partial<Meta>, pasta?: string): ResultadoImportacao {
   if (!eObj(bruto)) throw new ErroImportacao("O data.js não define window.CONTEUDO.");
   if (!Array.isArray(bruto.slides)) throw new ErroImportacao("O data.js não tem a lista de telas (slides).");
 

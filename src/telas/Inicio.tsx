@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Meta, Projeto } from "../modelo/tipos";
 import { metaVazia, novoProjeto } from "../modelo/fabrica";
 import { importarDataJs } from "../modelo/importar";
+import { avaliarIsolado } from "../servicos/avaliarIsolado";
 import { abrirArquivo, abrirRascunho, excluirRascunho, listarRascunhos, type ResumoRascunho } from "../servicos/rascunhos";
 import { lerDataJs, nomeDaPasta } from "../servicos/importacao";
 import { confirmar, escolherArquivoCevscorm, escolherPastaPacote } from "../servicos/dialogos";
@@ -80,7 +81,7 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
       const pasta = await escolherPastaPacote();
       if (!pasta) return;
       const fonte = await lerDataJs(pasta);
-      const { projeto, avisos } = importarDataJs(fonte, undefined, nomeDaPasta(pasta));
+      const { projeto, avisos } = await importarDataJs(fonte, { avaliar: avaliarIsolado, pasta: nomeDaPasta(pasta) });
       aoAbrir(projeto, { novo: true });
       if (avisos.length) avisar(`Pacote importado com ${avisos.length} ${avisos.length === 1 ? "observação" : "observações"}:`, "info", avisos);
       else avisar("Pacote importado.", "ok");

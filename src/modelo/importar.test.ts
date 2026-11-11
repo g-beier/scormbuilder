@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compilarDataJs, nomePacote } from "./compilar";
-import { avaliarDataJs, importarDataJs } from "./importar";
+import { avaliarDataJsDireto as avaliarDataJs, importarDataJsSemIsolamento as importarDataJs } from "./importar";
 import type { SlideConteudo } from "./tipos";
 import { validar } from "./validar";
 
