@@ -14,6 +14,7 @@ import type { Projeto } from "../modelo/tipos";
 import { validar } from "../modelo/validar";
 import { compilarConteudo, compilarDataJs, nomePacote } from "../modelo/compilar";
 import { gerarTypst } from "../modelo/pdf";
+import { imagensDoProjeto } from "../modelo/imagens";
 import { confirmar } from "../servicos/dialogos";
 import { emTauri, mensagemDeErro, MSG_SO_NO_APP } from "../servicos/ambiente";
 import {
@@ -90,11 +91,26 @@ export function DialogoExportar({ projeto, aberto, aoFechar, aoIrParaProblema }:
     const gerar = (sobrescrever: boolean) =>
       fmt === "pdf"
         ? exportarPdf(
-            { nomePacote: nome, fonte: gerarTypst(compilarConteudo(projeto), { gerado: new Date().toLocaleDateString("pt-BR") }) },
+            {
+              nomePacote: nome,
+              fonte: gerarTypst(compilarConteudo(projeto), { gerado: new Date().toLocaleDateString("pt-BR") }),
+              projetoId: projeto.id,
+            },
             pastaMae,
             sobrescrever,
           )
-        : exportarPacote({ nomePacote: nome, titulo: projeto.meta.titulo, dataJs: compilarDataJs(projeto) }, pastaMae, fmt, sobrescrever);
+        : exportarPacote(
+            {
+              nomePacote: nome,
+              titulo: projeto.meta.titulo,
+              dataJs: compilarDataJs(projeto),
+              projetoId: projeto.id,
+              imagens: imagensDoProjeto(projeto),
+            },
+            pastaMae,
+            fmt,
+            sobrescrever,
+          );
     try {
       let r: ResultadoExportacao;
       try {

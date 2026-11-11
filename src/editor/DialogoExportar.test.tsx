@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 vi.mock("@tauri-apps/plugin-opener", () => ({ revealItemInDir: (...a: unknown[]) => revealItemInDir(...a) }));
 
 import { DialogoExportar } from "./DialogoExportar";
-import { novoProjeto } from "../modelo/fabrica";
+import { novoBloco, novoProjeto, novoSlide } from "../modelo/fabrica";
 import { compilarDataJs } from "../modelo/compilar";
 
 const META = { curso: "CTGESTAO", ud: 11, atividade: "LEITURA", numero: 2, titulo: "Gestão & ação", contexto: "Curso · UD 11" };
@@ -89,7 +89,7 @@ describe("DialogoExportar", () => {
     expect(chamadas).toBe(2);
     expect(confirm).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith("exportar_pacote", {
-      entrada: { nomePacote: "CTGESTAO_UD11_LEITURA2", titulo: "Gestão & ação", dataJs: compilarDataJs(p) },
+      entrada: { nomePacote: "CTGESTAO_UD11_LEITURA2", titulo: "Gestão & ação", dataJs: compilarDataJs(p), projetoId: p.id, imagens: [] },
       destino: "/Users/a/Mesa",
       formato: "zip",
       sobrescrever: true,
@@ -118,6 +118,42 @@ describe("DialogoExportar", () => {
     expect(formatos).toEqual([["/Users/a/ead-scorm", "pasta", false]]);
     expect(screen.queryByText("Pacote exportado.")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("envia o projeto e as imagens usadas (pacote e PDF)", async () => {
+    const p = novoProjeto(META);
+    const s = novoSlide("conteudo");
+    s.titulo = "Mapa";
+    s.blocos = [
+      { ...novoBloco("imagem"), arquivo: "fedcba9876543210.jpg", alt: "Mapa" },
+      { ...novoBloco("imagem"), arquivo: "0123456789abcdef.png", decorativa: true },
+      { ...novoBloco("imagem"), arquivo: "fedcba9876543210.jpg", alt: "De novo" },
+    ];
+    p.slides.splice(1, 0, s);
+    const chamadas: Array<[string, Record<string, unknown>]> = [];
+    invoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      if (cmd === "ler_preferencias") return { ultimoDestino: "/x" };
+      if (cmd === "salvar_preferencias") return undefined;
+      chamadas.push([cmd, args]);
+      return { caminho: "/x/a", arquivos: 1, bytes: 1 };
+    });
+    render(<DialogoExportar projeto={p} aberto aoFechar={() => {}} />);
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(screen.getByText("Exportar"));
+    });
+    const [cmd, args] = chamadas[0];
+    expect(cmd).toBe("exportar_pacote");
+    expect(args.entrada).toMatchObject({ projetoId: p.id, imagens: ["0123456789abcdef.png", "fedcba9876543210.jpg"] });
+    expect((args.entrada as { dataJs: string }).dataJs).toContain('"src": "img/fedcba9876543210.jpg"');
+
+    fireEvent.click(screen.getByRole("radio", { name: /PDF/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByText("Exportar"));
+    });
+    const [cmdPdf, argsPdf] = chamadas[1];
+    expect(cmdPdf).toBe("exportar_pdf");
+    expect(argsPdf.entrada).toMatchObject({ nomePacote: "CTGESTAO_UD11_LEITURA2", projetoId: p.id });
   });
 
   it("erro comum aparece como alerta", async () => {

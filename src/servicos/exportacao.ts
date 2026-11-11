@@ -16,6 +16,10 @@ export interface EntradaExportacao {
   titulo: string;
   /** Texto completo do `js/data.js` (de `compilarDataJs`). */
   dataJs: string;
+  /** Id do projeto (rascunho) de onde vêm as imagens. */
+  projetoId: string;
+  /** Imagens a copiar para `img/` do pacote (de `imagensDoProjeto`). */
+  imagens: string[];
 }
 
 /** Espelha `ResultadoExportacao` do Rust. */
@@ -55,7 +59,8 @@ export function exportarPacote(
  * compilado pelo Typst no backend a partir de `fonte` (de `gerarTypst`).
  */
 export function exportarPdf(
-  entrada: { nomePacote: string; fonte: string },
+  /** `projetoId`: rascunho de onde o Typst lê as imagens (`img/<arquivo>`). */
+  entrada: { nomePacote: string; fonte: string; projetoId: string },
   destino: string,
   sobrescrever = false,
 ): Promise<ResultadoExportacao> {
