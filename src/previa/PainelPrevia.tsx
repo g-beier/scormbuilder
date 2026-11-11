@@ -7,6 +7,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import modeloIndex from "../../runtime/index.html?raw";
 import { compilarConteudo } from "../modelo/compilar";
+import { imagensDoConteudo } from "../modelo/imagens";
+import { urlsDasImagens, urlsEmCache } from "../servicos/imagens";
 import type { Projeto } from "../modelo/tipos";
 import { Icone } from "../editor/Icones";
 import { LIMITE_SUSPEND_DATA, mockScorm } from "./apiScorm";
@@ -98,6 +100,28 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
     return () => clearTimeout(t);
   }, [entrada, entradaEstavel]);
 
+  // ---------- Imagens (data: URLs lidas do rascunho) ----------
+  // A prévia só recarrega quando as imagens do conteúdo já estão prontas: enquanto
+  // a leitura não termina, o iframe continua mostrando a versão anterior (sem piscar).
+  // Fora do app (npm run dev) nada é lido e o motor mostra "Imagem não carregada".
+  const [carga, setCarga] = useState<{ entrada: string; imagens: Record<string, string> } | null>(null);
+  useEffect(() => {
+    const { conteudo } = JSON.parse(entradaEstavel) as { conteudo: ReturnType<typeof compilarConteudo> };
+    const nomes = imagensDoConteudo(conteudo);
+    const prontas = urlsEmCache(projeto.id, nomes);
+    if (prontas) {
+      setCarga({ entrada: entradaEstavel, imagens: prontas });
+      return;
+    }
+    let vivo = true;
+    urlsDasImagens(projeto.id, nomes).then((imagens) => {
+      if (vivo) setCarga({ entrada: entradaEstavel, imagens });
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [entradaEstavel, projeto.id]);
+
   const pararEspera = useCallback(() => {
     if (esperaMotor.current) clearTimeout(esperaMotor.current);
     esperaMotor.current = null;
@@ -146,7 +170,8 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
 
   // ---------- Monta e (re)carrega o iframe ----------
   useEffect(() => {
-    const { titulo, conteudo } = JSON.parse(entradaEstavel) as { titulo: string; conteudo: ReturnType<typeof compilarConteudo> };
+    if (!carga) return;
+    const { titulo, conteudo } = JSON.parse(carga.entrada) as { titulo: string; conteudo: ReturnType<typeof compilarConteudo> };
     const ids = conteudo.slides.map((s) => s.id);
 
     // Tela a manter: a pedida pelo editor, senão a que está na prévia agora (pelo id da tela).
@@ -172,6 +197,7 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
         livre,
         sessao,
         scorm: estado,
+        imagens: carga.imagens,
       });
     } catch (e) {
       setFalha(String((e as Error).message ?? e));
@@ -185,7 +211,7 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
     contador.current += 1;
     // O comentário com o contador garante que o iframe recarrega mesmo com o mesmo conteúdo.
     setSrcdoc(`${html}<!-- carga ${contador.current} -->`);
-  }, [entradaEstavel, livre, chave, recargas]);
+  }, [carga, livre, chave, recargas]);
 
   useEffect(
     () => () => {

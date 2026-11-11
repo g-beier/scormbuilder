@@ -9,10 +9,13 @@
  *   clássico não precisa de CORS e passa na CSP do app (`script-src 'self'`);
  * - nenhum `<script>` inline (a CSP do app vale também no srcdoc): CONTEUDO,
  *   opções e o estado SCORM inicial vão num bloco JSON, e a `previa/ponte.js`
- *   (arquivo estático do app) cria a API SCORM simulada e chama `Motor.iniciar`.
+ *   (arquivo estático do app) cria a API SCORM simulada e chama `Motor.iniciar`;
+ * - imagens: o iframe não alcança a pasta do rascunho, então `img/<arquivo>`
+ *   vira o `data:` de `imagens` (a CSP do app já aceita `img-src data:`).
  */
 import type { ConteudoV2 } from "../modelo/tipos";
 import { escaparHtml } from "../modelo/texto";
+import { trocarImagens } from "../modelo/imagens";
 
 /** Estado SCORM que a ponte usa para responder às leituras síncronas do motor. */
 export interface EstadoScormInicial {
@@ -37,6 +40,8 @@ export interface OpcoesPrevia {
   /** Identifica a carga do iframe nas mensagens (ver ponteScorm.ts). */
   sessao: string;
   scorm: EstadoScormInicial;
+  /** `data:` URL de cada imagem (chave = nome em `img/`). Faltando: fica `img/<nome>`. */
+  imagens?: Readonly<Record<string, string>>;
 }
 
 /** Id do bloco JSON lido pela ponte. */
@@ -70,7 +75,7 @@ function substituirUma(texto: string, alvo: string | RegExp, por: string): strin
 export function montarSrcdoc(modelo: string, o: OpcoesPrevia): string {
   const dados = {
     sessao: o.sessao,
-    conteudo: o.conteudo,
+    conteudo: o.imagens ? trocarImagens(o.conteudo, o.imagens) : o.conteudo,
     opcoes: { chave: o.chave, telaInicial: o.telaInicial, livre: o.livre },
     scorm: o.scorm,
   };

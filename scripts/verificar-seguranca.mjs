@@ -6,7 +6,8 @@
  *     window/document/objetos do app nem a rede; laço infinito é interrompido;
  *  2. a prévia: iframe sandbox sem allow-same-origin, motor abre com as fontes,
  *     sem violação de CSP, "Situação SCORM" atualiza, salto de tela pelo editor,
- *     e o iframe não alcança o app.
+ *     e o iframe não alcança o app;
+ *  3. imagens (M9): uma imagem `data:` num srcdoc com o mesmo sandbox carrega sob a CSP.
  * Uso: npm run verificar-seguranca (faz o build e roda este script)
  */
 import http from "node:http";
@@ -35,6 +36,7 @@ const servidor = http.createServer((req, res) => {
 });
 await new Promise((ok) => servidor.listen(0, "127.0.0.1", ok));
 const URL_APP = `http://127.0.0.1:${servidor.address().port}/`;
+const PNG = "data:image/png;base64," + readFileSync(join(RAIZ, "runtime", "test", "fixtures", "img", "paisagem.png")).toString("base64");
 const worker = "/assets/" + readdirSync(join(DIST, "assets")).find((n) => /^avaliador\.worker-.*\.js$/.test(n));
 
 let falhas = 0;
@@ -175,6 +177,30 @@ for (const [nomeNav, tipo] of [
   }
   const sit5 = await pagina.locator(".situacao-scorm").innerText();
   conferir("modo aluno até o fim: lesson_status completed", /completed/.test(sit5), sit5);
+
+  // ---------- 3. Imagem data: no srcdoc isolado (como a prévia faz com img/<arquivo>) ----------
+  await pagina.evaluate((png) => {
+    const f = document.createElement("iframe");
+    f.id = "teste-imagem";
+    f.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
+    f.srcdoc = `<!doctype html><img id="i" alt="teste" src="${png}">`;
+    document.body.appendChild(f);
+  }, PNG);
+  const quadroImg = await (await pagina.locator("#teste-imagem").elementHandle()).contentFrame();
+  await quadroImg.waitForSelector("#i");
+  const largura = await quadroImg.evaluate(
+    () =>
+      new Promise((ok) => {
+        const i = document.getElementById("i");
+        if (i.complete) ok(i.naturalWidth);
+        else {
+          i.onload = () => ok(i.naturalWidth);
+          i.onerror = () => ok(0);
+        }
+      }),
+  );
+  conferir("imagem data: carrega no srcdoc isolado sob a CSP", largura > 0, String(largura));
+  await pagina.evaluate(() => document.getElementById("teste-imagem")?.remove());
 
   const v = await pagina.evaluate(() => window.__violacoes);
   conferir("nenhuma violação de CSP", v.length === 0 && violacoes.length === 0, JSON.stringify([...v, ...violacoes]));

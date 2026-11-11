@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { compilarConteudo } from "../modelo/compilar";
-import { novoProjeto } from "../modelo/fabrica";
+import { novoBloco, novoProjeto, novoSlide } from "../modelo/fabrica";
 import { cssComFontesEmbutidas, ID_DADOS, jsonParaScript, montarSrcdoc, type OpcoesPrevia } from "./montarSrcdoc";
 
 const modelo = readFileSync(new URL("../../runtime/index.html", import.meta.url), "utf8");
@@ -56,6 +56,21 @@ describe("montarSrcdoc", () => {
       opcoes: { chave: "previa-x", telaInicial: 2, livre: true },
       scorm: opcoes.scorm,
     });
+  });
+
+  it("troca img/<arquivo> pelo data: das imagens e mantém as que faltam", () => {
+    const q = novoProjeto({ curso: "CTGESTAO", ud: 1, atividade: "LEITURA", numero: 1, titulo: "T", contexto: "c" });
+    const s = novoSlide("conteudo");
+    s.blocos = [
+      { ...novoBloco("imagem"), arquivo: "0123456789abcdef.png", alt: "a" },
+      { ...novoBloco("imagem"), arquivo: "fedcba9876543210.gif", alt: "b" },
+    ];
+    q.slides.splice(1, 0, s);
+    const doc = montarSrcdoc(modelo, { ...opcoes, conteudo: compilarConteudo(q), imagens: { "0123456789abcdef.png": "data:image/png;base64,QUJD" } });
+    const dados = JSON.parse(new RegExp(`<script type="application/json" id="${ID_DADOS}">([\\s\\S]*?)</script>`).exec(doc)![1]);
+    const blocos = dados.conteudo.slides[1].blocos;
+    expect(blocos[0].src).toBe("data:image/png;base64,QUJD");
+    expect(blocos[1].src).toBe("img/fedcba9876543210.gif");
   });
 
   it("jsonParaScript escapa < > e separadores", () => {
