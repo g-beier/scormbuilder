@@ -11,8 +11,17 @@
  * conteúdo é interpretado como marcação. Títulos, listas e tabelas usam os
  * elementos semânticos do Typst (viram tags no PDF); linhas e caixas de marcar
  * são decorativas (`pdf.artifact`).
+ *
+ * Imagens: `image("img/<arquivo>", alt: …)` (o backend serve os arquivos do
+ * rascunho), com largura até a da página e altura até 9 cm; a decorativa vira
+ * artefato (sem descrição). Endereço fora do padrão do rascunho não é pedido:
+ * sai só a descrição, entre colchetes.
  */
 import type { BlocoV2, ConteudoV2, SlideV2 } from "./tipos";
+import { nomeDoSrc } from "./imagens";
+
+/** Altura máxima de uma imagem no PDF (a largura vai até a da área de texto). */
+export const ALTURA_MAX_IMAGEM = "9cm";
 
 export interface OpcoesPdf {
   /** Data da geração, mostrada no cabeçalho (ex.: "10/11/2026"). */
@@ -136,6 +145,7 @@ export function embaralharFixo(n: number, semente: string): number[] {
 // ---------- Modelo do documento (preâmbulo) ----------
 
 const PREAMBULO = String.raw`
+#let ALTURA_MAX = ${ALTURA_MAX_IMAGEM}
 #let navy = rgb("#1b1f4b")
 #let navy3 = rgb("#2c3280")
 #let navytinta = rgb("#eceefa")
@@ -176,6 +186,16 @@ const PREAMBULO = String.raw`
 #let campo(rot) = grid(columns: (auto, 1fr), column-gutter: 6pt, align: bottom,
   text(weight: "semibold", fill: navy, rot), pdf.artifact(block(width: 100%, height: 1.1em, stroke: (bottom: 0.75pt + tinta))))
 #let destaque(corpo) = block(width: 100%, inset: (x: 12pt, y: 10pt), radius: 5pt, fill: navy, stroke: (left: 5pt + amarelo), text(fill: white, corpo))
+#let imagem(caminho, alt: none, decorativa: false) = layout(area => {
+  let natural = measure(image(caminho))
+  let w = calc.min(natural.width, area.width)
+  let h = if natural.width > 0pt { natural.height * (w / natural.width) } else { natural.height }
+  if h > ALTURA_MAX { w = w * (ALTURA_MAX / h) }
+  let img = image(caminho, width: w, alt: alt)
+  align(center, if decorativa { pdf.artifact(img) } else { img })
+})
+#set figure(numbering: none)
+#show figure.caption: set text(size: 9pt, fill: suave)
 #let anotar(titulo, n) = block(width: 100%, inset: 10pt, radius: 5pt, stroke: 1pt + borda, breakable: false, {
   text(weight: "semibold", fill: navy, titulo)
   linhas(n)
@@ -310,6 +330,19 @@ function bloco(b: BlocoV2, ctx: Ctx): string {
         ...perguntas,
         `#anotar([${txt("Anote o caminho que você fez (números das perguntas) e a sua última resposta:")}], 3)`,
       ].join("\n");
+    }
+    case "imagem": {
+      const decorativa = b.decorativa === true;
+      const legenda = b.legenda ? html(b.legenda) : "";
+      const nome = nomeDoSrc(b.src);
+      if (!nome) {
+        const desc = decorativa ? "" : `#nota[${txt(`[Imagem: ${b.alt?.trim() || "sem descrição"}]`)}]`;
+        return [desc, legenda ? `#nota[${legenda}]` : ""].filter(Boolean).join("\n");
+      }
+      const img = `imagem(${str(`img/${nome}`)}, ${decorativa ? "decorativa: true" : `alt: ${str((b.alt ?? "").replace(/\s+/g, " ").trim())}`})`;
+      // Decorativa: artefato, fora da árvore de leitura; a legenda (se houver) fica como texto
+      if (decorativa) return [`#block(width: 100%, above: 1em, below: 1em, ${img})`, legenda ? `#align(center)[#nota[${legenda}]]` : ""].filter(Boolean).join("\n");
+      return legenda ? `#figure(${img}, caption: [${legenda}])` : `#figure(${img})`;
     }
     default:
       return "";
