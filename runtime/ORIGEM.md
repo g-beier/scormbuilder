@@ -72,3 +72,14 @@ O `css/tema.css` passou a ter todo valor de aparência como variável em `:root`
 - `motor.js` não tem cor inline (só `transform`, `transition`, `visibility`, `z-index` e a largura da barra), então não mudou.
 
 Teste: `runtime/test/tema-tokens.test.mjs` (roda no `npm test`) confere a lista exata de tokens e valores do tema CEV e falha se aparecer cor hex/rgb/hsl, `border-radius` em px, `font-family` literal ou sombra com cor fixa fora do `:root`.
+
+## Imagem (M9, passo 1)
+
+Tipo novo, sem equivalente no LEITURA2 nem no kit. Bloco passivo (como `texto` ou `destaque`): sem `pendentes`, sem `estado`, não bloqueia o "Próximo" nem a conclusão e não ocupa nada no `suspend_data`. Os 18 pacotes LEITURA2 não têm o tipo, então nada muda para eles; o CSS novo só usa classes novas (`.figura`, `.img-falha`) e tokens do `:root`.
+
+- `imagem`: `<figure class="figura">` com `<img loading="lazy" decoding="async">` e `<figcaption>` (innerHTML) quando há `legenda`. `alt` vai por `setAttribute` (texto simples). Decorativa: `alt=""` + `role="presentation"`, e a figura recebe `aria-hidden="true"` quando não tem legenda. A imagem não é arrastável (`draggable=false`), para não competir com o gesto de deslizar.
+- Endereços aceitos: `img/<nome>.(png|jpg|jpeg|webp|gif|svg)` (um nível, sem `..`, nome começando por letra, dígito, `_` ou `-`) e, para a prévia do editor, `data:image/(png|jpeg|webp|gif);base64,...`. Qualquer outro (`http(s):`, `/img/...`, subpasta, `javascript:`, `data:image/svg+xml`, ausente) não chega a ser pedido: aparece o aviso discreto `p.nota` "[Imagem não exibida: o arquivo precisa estar na pasta img/ do pacote.]". O pacote roda offline, então link externo nunca é aceito.
+- Imagem que não carrega (evento `error`): a informativa dá lugar à caixa `.img-falha` "Imagem não carregada: <alt>"; a decorativa some (a legenda, se houver, fica).
+- Altura: `max-height: 40vh` (com `266px` antes, como reserva). O `vh` dentro do iframe do Moodle é a altura do iframe (666,5px), então dá ~266px: em 375px a área que rola tem ~469px e cabem kicker, título de duas linhas, um retrato no limite e um parágrafo; com 45vh (~300px) essa tela já rolava. Largura até 100%, proporção mantida (`object-fit: contain`), cantos `var(--raio)`.
+
+Teste: `node runtime/test/imagem.mjs "$TMPDIR"cev-m9` (fixture `test/fixtures/imagem-v2.data.js` + `test/fixtures/img/`, PNGs gerados com as cores do tema; 1200x666 e 375x666): render, alt literal, decorativa, legenda HTML, carregamento preguiçoso, erro de carga, endereços recusados sem requisição, sem rolagem horizontal, telas que cabem sem rolar, não bloqueia, sem estado no `suspend_data` e conclusão.

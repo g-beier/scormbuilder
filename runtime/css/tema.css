@@ -361,3 +361,19 @@ h1, h2, h3, .kicker, .topo-h1, .eyebrow, .flow-name, .tl-n, .progresso-texto, bu
 .ram-resumo li { margin: 0 0 8px; }
 .ram-resumo-p { display: block; color: var(--tinta-suave); font-size: 14px; line-height: 1.45; }
 .ram-resumo-r { display: block; color: var(--navy); }
+
+/* ---------- Imagem (M9) ----------
+   Altura máxima de 40% da janela: dentro do iframe do Moodle (666,5px) dá ~266px, o que deixa
+   cabeçalho, kicker, título de duas linhas, legenda ou um parágrafo e rodapé visíveis sem rolar
+   em 1200px e 375px (em 375px a área que rola tem ~469px; com 45vh um retrato já passava).
+   O valor em px vem antes como reserva para navegadores sem vh. */
+.figura { margin: 16px 0; min-width: 0; }
+.figura img {
+  display: block; margin: 0 auto; width: auto; height: auto; max-width: 100%;
+  max-height: 266px; max-height: 40vh; object-fit: contain; border-radius: var(--raio);
+}
+.figura figcaption { margin-top: 8px; font-size: 14px; line-height: 1.45; color: var(--tinta-suave); text-align: center; overflow-wrap: break-word; }
+.img-falha {
+  margin: 0; padding: 12px 14px; border: 1px dashed var(--linha); border-radius: var(--raio);
+  background: var(--branco); color: var(--tinta-suave); font-size: 14px; overflow-wrap: break-word;
+}
