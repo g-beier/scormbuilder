@@ -284,7 +284,7 @@ fn app_data(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|_| "Não foi possível localizar a pasta de dados do aplicativo.".to_string())
 }
 
-async fn em_segundo_plano<T: Send + 'static>(
+pub(crate) async fn em_segundo_plano<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(f)

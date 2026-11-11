@@ -347,7 +347,7 @@ pub fn validar_pacote_em(pasta: &Path) -> Vec<String> {
 // ---------- Zip ----------
 
 /// Data/hora atual (UTC) no formato do zip; 1980-01-01 se não der.
-fn agora_zip() -> zip::DateTime {
+pub(crate) fn agora_zip() -> zip::DateTime {
     let segs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

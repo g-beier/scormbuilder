@@ -11,7 +11,7 @@ use crate::imagens;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
@@ -223,10 +223,21 @@ pub fn excluir_rascunho_em(base: &Path, id: &str) -> Result<(), String> {
     }
 }
 
-/// Grava o projeto (JSON indentado) em `caminho`, acrescentando a extensão
-/// `.cevscorm` se faltar. Devolve o caminho final.
-pub fn salvar_arquivo_em(caminho: &Path, projeto: &Value) -> Result<PathBuf, String> {
-    validar_projeto(projeto)?;
+// ---------- Arquivo .cevscorm (zip) ----------
+//
+// Desde o M9 o `.cevscorm` é um zip: `projeto.json` (JSON indentado) e
+// `img/<nome>` para cada imagem usada pelo projeto. O `.cevscorm` da 0.1.0
+// (JSON puro) continua abrindo: a detecção é pela assinatura `PK\x03\x04`.
+
+const PROJETO_JSON: &str = "projeto.json";
+const ASSINATURA_ZIP: &[u8; 4] = b"PK\x03\x04";
+/// Limite do `projeto.json` descompactado.
+const LIMITE_PROJETO_JSON: u64 = 20 * 1024 * 1024;
+/// Limite da soma do que é descompactado ao abrir (proteção contra zip bomb).
+pub const LIMITE_TOTAL_ARQUIVO: u64 = 200 * 1024 * 1024;
+const LIMITE_ENTRADAS: usize = 10_000;
+
+fn com_extensao(caminho: &Path) -> PathBuf {
     let mut destino = caminho.to_path_buf();
     if destino.extension().and_then(|x| x.to_str()) != Some(EXTENSAO_ARQUIVO) {
         let mut nome = destino.as_os_str().to_os_string();
@@ -234,14 +245,160 @@ pub fn salvar_arquivo_em(caminho: &Path, projeto: &Value) -> Result<PathBuf, Str
         nome.push(EXTENSAO_ARQUIVO);
         destino = PathBuf::from(nome);
     }
+    destino
+}
+
+/// Grava o projeto como zip em `caminho` (acrescenta `.cevscorm` se faltar),
+/// levando as imagens usadas de `<base>/rascunhos/<id>/img/`. Gravação
+/// atômica (`.tmp` + rename). Devolve o caminho final.
+pub fn salvar_arquivo_em(base: &Path, caminho: &Path, projeto: &Value) -> Result<PathBuf, String> {
+    let id = validar_projeto(projeto)?;
+    let pasta_img = imagens::pasta_imagens(base, id)?;
+    let usadas = imagens::imagens_do_projeto(projeto)?;
+    for nome in &usadas {
+        if !pasta_img.join(nome).is_file() {
+            return Err(format!(
+                "A imagem {nome} usada no projeto não foi encontrada. Escolha a imagem de novo no bloco Imagem e salve outra vez."
+            ));
+        }
+    }
     let json = serde_json::to_vec_pretty(projeto)
         .map_err(|e| format!("Não foi possível preparar o arquivo: {e}."))?;
-    gravar_atomico(&destino, &json).map_err(|e| erro_io("salvar o arquivo", &e))?;
+
+    let destino = com_extensao(caminho);
+    let mut nome_tmp = destino
+        .file_name()
+        .ok_or_else(|| "Destino do arquivo inválido.".to_string())?
+        .to_os_string();
+    nome_tmp.push(".tmp");
+    let tmp = destino.with_file_name(nome_tmp);
+    let resultado = (|| -> Result<(), String> {
+        let f = fs::File::create(&tmp).map_err(|e| erro_io("salvar o arquivo", &e))?;
+        let mut z = zip::ZipWriter::new(f);
+        let opcoes = zip::write::SimpleFileOptions::default()
+            .last_modified_time(crate::exportar::agora_zip())
+            .unix_permissions(0o644);
+        let erro_zip = |e: zip::result::ZipError| format!("Não foi possível montar o arquivo: {e}.");
+        let erro_gravar = |e: io::Error| erro_io("salvar o arquivo", &e);
+        z.start_file(PROJETO_JSON, opcoes.compression_method(zip::CompressionMethod::Deflated))
+            .map_err(erro_zip)?;
+        z.write_all(&json).map_err(erro_gravar)?;
+        for nome in &usadas {
+            let bytes = fs::read(pasta_img.join(nome)).map_err(|e| erro_io(&format!("ler a imagem {nome}"), &e))?;
+            // Imagens já são comprimidas: guardar sem recompactar.
+            z.start_file(format!("img/{nome}"), opcoes.compression_method(zip::CompressionMethod::Stored))
+                .map_err(erro_zip)?;
+            z.write_all(&bytes).map_err(erro_gravar)?;
+        }
+        let f = z.finish().map_err(erro_zip)?;
+        f.sync_all().map_err(erro_gravar)?;
+        drop(f);
+        fs::rename(&tmp, &destino).map_err(erro_gravar)
+    })();
+    if let Err(e) = resultado {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
     Ok(destino)
 }
 
-pub fn abrir_arquivo_em(caminho: &Path) -> Result<Value, String> {
-    ler_projeto(caminho, "abrir o arquivo")
+/// Abre um `.cevscorm`: zip (M9) ou JSON puro (0.1.0). No zip, as imagens
+/// são conferidas e extraídas para `<base>/rascunhos/<id>/img/`.
+pub fn abrir_arquivo_em(base: &Path, caminho: &Path) -> Result<Value, String> {
+    abrir_arquivo_com_limite(base, caminho, LIMITE_TOTAL_ARQUIVO)
+}
+
+fn abrir_arquivo_com_limite(base: &Path, caminho: &Path, limite_total: u64) -> Result<Value, String> {
+    let mut f = fs::File::open(caminho).map_err(|e| erro_io("abrir o arquivo", &e))?;
+    let mut cabecalho = Vec::with_capacity(4);
+    (&mut f)
+        .take(4)
+        .read_to_end(&mut cabecalho)
+        .map_err(|e| erro_io("abrir o arquivo", &e))?;
+    if cabecalho.as_slice() != ASSINATURA_ZIP {
+        drop(f);
+        return ler_projeto(caminho, "abrir o arquivo"); // .cevscorm da 0.1.0
+    }
+    f.seek(SeekFrom::Start(0)).map_err(|e| erro_io("abrir o arquivo", &e))?;
+    abrir_zip(base, f, limite_total)
+}
+
+fn corrompido() -> String {
+    "O arquivo está corrompido ou não é um projeto válido.".to_string()
+}
+
+/// Lê no máximo `limite` bytes descompactados; passou disso, é erro.
+fn ler_limitado(item: impl Read, limite: u64) -> Result<Option<Vec<u8>>, String> {
+    let mut v = Vec::new();
+    item.take(limite + 1)
+        .read_to_end(&mut v)
+        .map_err(|_| corrompido())?;
+    Ok(if v.len() as u64 > limite { None } else { Some(v) })
+}
+
+fn abrir_zip(base: &Path, f: fs::File, limite_total: u64) -> Result<Value, String> {
+    let mut z = zip::ZipArchive::new(f).map_err(|_| corrompido())?;
+    if z.len() > LIMITE_ENTRADAS {
+        return Err("O arquivo tem itens demais para ser um projeto válido.".to_string());
+    }
+    let grande_demais = || "O arquivo é grande demais para abrir (mais de 200 MB descompactado).".to_string();
+
+    // 1ª passada: só nomes (sem descompactar). Recusa caminhos indevidos.
+    let mut imagens_zip = Vec::new();
+    for i in 0..z.len() {
+        let item = z.by_index_raw(i).map_err(|_| corrompido())?;
+        let nome = item.name().map_err(|_| corrompido())?.into_owned();
+        let indevido = nome.starts_with('/')
+            || nome.contains('\\')
+            || nome.contains(':')
+            || nome.split('/').any(|p| p == ".." || p == ".")
+            || item.enclosed_name().is_none();
+        if indevido {
+            return Err(format!("O arquivo tem um caminho indevido: {nome}"));
+        }
+        if item.is_dir() || nome == PROJETO_JSON {
+            continue;
+        }
+        if let Some(img) = nome.strip_prefix("img/") {
+            imagens::validar_nome_imagem(img)
+                .map_err(|_| format!("O arquivo tem uma imagem com nome inválido: {nome}"))?;
+            imagens_zip.push((i, img.to_string()));
+        } else {
+            // Itens desconhecidos (ex.: `fontes/` de versões futuras, `__MACOSX/`) são ignorados.
+            eprintln!("[cevscorm] item ignorado: {nome}");
+        }
+    }
+
+    // projeto.json
+    let json = match z.by_name(PROJETO_JSON) {
+        Ok(item) => ler_limitado(item, LIMITE_PROJETO_JSON)?.ok_or_else(grande_demais)?,
+        Err(zip::result::ZipError::FileNotFound) => {
+            return Err("O arquivo não tem o projeto (projeto.json) dentro dele.".to_string());
+        }
+        Err(_) => return Err(corrompido()),
+    };
+    let mut total = json.len() as u64;
+    let projeto: Value = serde_json::from_slice(&json).map_err(|_| corrompido())?;
+    let id = validar_projeto(&projeto)?;
+    let pasta = imagens::pasta_imagens(base, id)?;
+
+    // 2ª passada: imagens, conferidas (tipo, tamanho e hash = nome).
+    for (i, nome) in imagens_zip {
+        let item = z.by_index(i).map_err(|_| corrompido())?;
+        let bytes = ler_limitado(item, imagens::LIMITE_IMAGEM)?
+            .ok_or_else(|| format!("A imagem {nome} do arquivo passa do limite de 2 MB."))?;
+        total += bytes.len() as u64;
+        if total > limite_total {
+            return Err(grande_demais());
+        }
+        let quebrada = || format!("A imagem {nome} do arquivo está corrompida.");
+        let (tipo, _, _) = imagens::analisar(&bytes).map_err(|_| quebrada())?;
+        if imagens::nome_por_conteudo(&bytes, tipo) != nome {
+            return Err(quebrada());
+        }
+        imagens::gravar_imagem(&pasta, &nome, &bytes)?;
+    }
+    Ok(projeto)
 }
 
 
@@ -305,13 +462,18 @@ pub async fn excluir_rascunho(app: AppHandle, id: String) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub async fn salvar_arquivo(caminho: String, projeto: Value) -> Result<String, String> {
-    salvar_arquivo_em(Path::new(&caminho), &projeto).map(|p| p.to_string_lossy().into_owned())
+pub async fn salvar_arquivo(app: AppHandle, caminho: String, projeto: Value) -> Result<String, String> {
+    let base = app_data(&app)?;
+    imagens::em_segundo_plano(move || {
+        salvar_arquivo_em(&base, Path::new(&caminho), &projeto).map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn abrir_arquivo(caminho: String) -> Result<Value, String> {
-    abrir_arquivo_em(Path::new(&caminho))
+pub async fn abrir_arquivo(app: AppHandle, caminho: String) -> Result<Value, String> {
+    let base = app_data(&app)?;
+    imagens::em_segundo_plano(move || abrir_arquivo_em(&base, Path::new(&caminho))).await
 }
 
 #[tauri::command]
@@ -486,37 +648,182 @@ mod testes {
         assert_eq!(ids, vec!["novo", "meio", "velho"]);
     }
 
+    fn nomes_no_zip(caminho: &Path) -> Vec<String> {
+        let mut z = zip::ZipArchive::new(fs::File::open(caminho).unwrap()).unwrap();
+        (0..z.len())
+            .map(|i| z.by_index(i).unwrap().name().unwrap().into_owned())
+            .collect()
+    }
+
+    /// Monta um zip com os itens dados (nome, conteúdo), sem validação.
+    fn zip_cru(caminho: &Path, itens: &[(&str, &[u8])]) {
+        let mut z = zip::ZipWriter::new(fs::File::create(caminho).unwrap());
+        let o = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (nome, bytes) in itens {
+            z.start_file(*nome, o).unwrap();
+            z.write_all(bytes).unwrap();
+        }
+        z.finish().unwrap();
+    }
+
+    fn com_imagem(id: &str, nome: &str) -> Value {
+        let mut p = projeto(id, "2026-03-01T10:00:00.000Z");
+        p["slides"] = json!([
+            { "tipo": "capa" },
+            { "tipo": "conteudo", "blocos": [
+                { "id": "b-1", "tipo": "imagem", "arquivo": nome, "alt": "Escoteiros acampando" }
+            ]},
+            { "tipo": "fim" }
+        ]);
+        p
+    }
+
     #[test]
     fn ida_e_volta_do_arquivo_cevscorm() {
         let t = PastaTemp::nova();
         let p = projeto("arq", "2026-03-01T10:00:00.000Z");
-        let final_ = salvar_arquivo_em(&t.0.join("meu projeto"), &p).unwrap();
+        let final_ = salvar_arquivo_em(&t.0, &t.0.join("meu projeto"), &p).unwrap();
         assert_eq!(final_, t.0.join("meu projeto.cevscorm"));
-        let texto = fs::read_to_string(&final_).unwrap();
-        assert!(
-            texto.contains("\n  \"formato\""),
-            "deveria ser JSON indentado"
-        );
-        assert_eq!(abrir_arquivo_em(&final_).unwrap(), p);
+        assert!(fs::read(&final_).unwrap().starts_with(ASSINATURA_ZIP), "deveria ser zip");
+        assert_eq!(nomes_no_zip(&final_), vec![PROJETO_JSON]);
+        assert_eq!(abrir_arquivo_em(&t.0, &final_).unwrap(), p);
 
         let com_ext = t.0.join("b.cevscorm");
-        assert_eq!(salvar_arquivo_em(&com_ext, &p).unwrap(), com_ext);
+        assert_eq!(salvar_arquivo_em(&t.0, &com_ext, &p).unwrap(), com_ext);
         assert!(!t.0.join("b.cevscorm.tmp").exists());
 
         let ruim = t.0.join("ruim.cevscorm");
         fs::write(&ruim, br#"{"formato":"outro"}"#).unwrap();
-        assert!(
-            abrir_arquivo_em(&ruim)
-                .unwrap_err()
-                .contains("não é um projeto")
-        );
+        assert!(abrir_arquivo_em(&t.0, &ruim).unwrap_err().contains("não é um projeto"));
         fs::write(&ruim, b"lixo").unwrap();
-        assert!(abrir_arquivo_em(&ruim).unwrap_err().contains("corrompido"));
+        assert!(abrir_arquivo_em(&t.0, &ruim).unwrap_err().contains("corrompido"));
+        fs::write(&ruim, b"").unwrap();
+        assert!(abrir_arquivo_em(&t.0, &ruim).unwrap_err().contains("corrompido"));
+        fs::write(&ruim, b"PK\x03\x04 truncado").unwrap();
+        assert!(abrir_arquivo_em(&t.0, &ruim).unwrap_err().contains("corrompido"));
         assert!(
-            abrir_arquivo_em(&t.0.join("nada.cevscorm"))
+            abrir_arquivo_em(&t.0, &t.0.join("nada.cevscorm"))
                 .unwrap_err()
                 .contains("não foi encontrado")
         );
+    }
+
+    #[test]
+    fn abre_cevscorm_json_da_versao_0_1_0() {
+        let t = PastaTemp::nova();
+        let p = projeto("legado", "2026-01-01T00:00:00.000Z");
+        let arq = t.0.join("antigo.cevscorm");
+        fs::write(&arq, serde_json::to_vec_pretty(&p).unwrap()).unwrap();
+        assert_eq!(abrir_arquivo_em(&t.0, &arq).unwrap(), p);
+        assert!(!t.0.join("rascunhos").exists());
+    }
+
+    #[test]
+    fn ida_e_volta_com_imagem_leva_so_as_usadas() {
+        let origem = PastaTemp::nova();
+        let png = imagens::testes::png(40, 30, 1);
+        let entrada = origem.0.join("foto.png");
+        fs::write(&entrada, &png).unwrap();
+        let usada = imagens::importar_imagem_em(&origem.0, "arq", &entrada).unwrap().nome;
+        fs::write(&entrada, imagens::testes::png(40, 30, 2)).unwrap();
+        let sobra = imagens::importar_imagem_em(&origem.0, "arq", &entrada).unwrap().nome;
+
+        let p = com_imagem("arq", &usada);
+        let arq = salvar_arquivo_em(&origem.0, &origem.0.join("x"), &p).unwrap();
+        let mut nomes = nomes_no_zip(&arq);
+        nomes.sort();
+        assert_eq!(nomes, vec![format!("img/{usada}"), PROJETO_JSON.to_string()]);
+        assert!(!nomes.contains(&format!("img/{sobra}")));
+
+        // Abre em outro computador (app_data vazia): a imagem vai para o rascunho.
+        let destino = PastaTemp::nova();
+        assert_eq!(abrir_arquivo_em(&destino.0, &arq).unwrap(), p);
+        let img = destino.0.join("rascunhos/arq/img");
+        assert_eq!(fs::read(img.join(&usada)).unwrap(), png);
+        assert_eq!(fs::read_dir(&img).unwrap().count(), 1);
+        // Abrir de novo (imagem já existe) não falha.
+        assert_eq!(abrir_arquivo_em(&destino.0, &arq).unwrap(), p);
+    }
+
+    #[test]
+    fn salvar_com_imagem_faltando_e_erro() {
+        let t = PastaTemp::nova();
+        let p = com_imagem("arq", "0123456789abcdef.png");
+        let erro = salvar_arquivo_em(&t.0, &t.0.join("x"), &p).unwrap_err();
+        assert!(erro.contains("0123456789abcdef.png") && erro.contains("não foi encontrada"), "{erro}");
+        assert!(!t.0.join("x.cevscorm").exists() && !t.0.join("x.cevscorm.tmp").exists());
+        let p = com_imagem("arq", "../../segredo.png");
+        assert!(salvar_arquivo_em(&t.0, &t.0.join("x"), &p).unwrap_err().contains("inválido"));
+    }
+
+    #[test]
+    fn zip_slip_e_nomes_invalidos_sao_recusados() {
+        let t = PastaTemp::nova();
+        let base = t.0.join("dados");
+        let json = projeto("arq", "x").to_string();
+        let png = imagens::testes::png(1, 1, 0);
+        for nome in [
+            "../fora.png",
+            "img/../../fora.png",
+            "/abs/fora.png",
+            "img\\..\\fora.png",
+            "img/0123456789abcdef.svg",
+            "img/../0123456789abcdef.png",
+            "img/sub/0123456789abcdef.png",
+        ] {
+            let arq = t.0.join("m.cevscorm");
+            zip_cru(&arq, &[(PROJETO_JSON, json.as_bytes()), (nome, &png)]);
+            let erro = abrir_arquivo_em(&base, &arq).unwrap_err();
+            assert!(erro.contains("indevido") || erro.contains("inválido"), "{nome}: {erro}");
+        }
+        assert!(!t.0.join("fora.png").exists());
+        assert!(!base.exists(), "nada deveria ter sido gravado");
+    }
+
+    #[test]
+    fn zip_com_imagem_adulterada_ou_sem_projeto_e_recusado() {
+        let t = PastaTemp::nova();
+        let json = projeto("arq", "x").to_string();
+        let arq = t.0.join("m.cevscorm");
+
+        // Nome não confere com o conteúdo.
+        zip_cru(&arq, &[(PROJETO_JSON, json.as_bytes()), ("img/0123456789abcdef.png", &imagens::testes::png(1, 1, 0))]);
+        assert!(abrir_arquivo_em(&t.0, &arq).unwrap_err().contains("corrompida"));
+        // Texto com nome de PNG.
+        zip_cru(&arq, &[(PROJETO_JSON, json.as_bytes()), ("img/0123456789abcdef.png", b"texto")]);
+        assert!(abrir_arquivo_em(&t.0, &arq).unwrap_err().contains("corrompida"));
+        // Sem projeto.json.
+        zip_cru(&arq, &[("outro.json", json.as_bytes())]);
+        assert!(abrir_arquivo_em(&t.0, &arq).unwrap_err().contains("projeto.json"));
+        // projeto.json de outro formato.
+        zip_cru(&arq, &[(PROJETO_JSON, br#"{"formato":"outro"}"#)]);
+        assert!(abrir_arquivo_em(&t.0, &arq).unwrap_err().contains("não é um projeto"));
+        // Itens desconhecidos (versões futuras, __MACOSX) são ignorados.
+        zip_cru(&arq, &[(PROJETO_JSON, json.as_bytes()), ("fontes/a.woff2", b"x"), ("__MACOSX/._x", b"x")]);
+        assert_eq!(abrir_arquivo_em(&t.0, &arq).unwrap(), projeto("arq", "x"));
+    }
+
+    #[test]
+    fn zip_bomb_e_recusado() {
+        let t = PastaTemp::nova();
+        let json = projeto("arq", "x").to_string();
+        let arq = t.0.join("bomba.cevscorm");
+        // Imagem que descompacta para mais de 2 MB (zeros comprimem muito).
+        let mut grande = imagens::testes::png(1, 1, 0);
+        grande.resize((imagens::LIMITE_IMAGEM + 1) as usize, 0);
+        zip_cru(&arq, &[(PROJETO_JSON, json.as_bytes()), ("img/0123456789abcdef.png", &grande)]);
+        assert!(fs::metadata(&arq).unwrap().len() < 100_000);
+        assert!(abrir_arquivo_em(&t.0, &arq).unwrap_err().contains("limite de 2 MB"));
+
+        // Limite total: com um teto pequeno, duas imagens válidas já passam dele.
+        let (a, b) = (imagens::testes::png(1, 1, 1), imagens::testes::png(1, 1, 2));
+        let na = imagens::nome_por_conteudo(&a, imagens::TipoImagem::Png);
+        let nb = imagens::nome_por_conteudo(&b, imagens::TipoImagem::Png);
+        zip_cru(&arq, &[(PROJETO_JSON, json.as_bytes()), (&format!("img/{na}"), &a), (&format!("img/{nb}"), &b)]);
+        let limite = (json.len() + a.len() + 1) as u64;
+        assert!(abrir_arquivo_com_limite(&t.0, &arq, limite).unwrap_err().contains("grande demais"));
+        assert!(abrir_arquivo_com_limite(&t.0, &arq, limite + b.len() as u64).is_ok());
     }
 
     #[test]
