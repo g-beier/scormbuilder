@@ -161,8 +161,10 @@ describe.skipIf(pastas.length === 0)(`teste de ouro: ${pastas.length} pacotes LE
     const fonte = readFileSync(join(RAIZ, pasta, "js", "data.js"), "utf8");
     const legado = avaliarDataJs(fonte) as { contexto: string; slides: unknown[] };
 
-    const { projeto } = importarDataJs(fonte, undefined, pasta);
+    const { projeto, avisos } = importarDataJs(fonte, undefined, pasta);
     expect(nomePacote(projeto.meta)).toBe(pasta);
+    // O filtro de HTML não mexe em nada dos pacotes aprovados.
+    expect(avisos.filter((a) => /formatação não permitida/.test(a))).toEqual([]);
     const erros = validar(projeto).filter((p) => p.nivel === "erro");
     expect(erros.map((e) => e.mensagem)).toEqual([]);
 

@@ -1,5 +1,6 @@
 import { desescaparHtml } from "./texto";
 import { ErroImportacao, avaliarDataJsDireto, type Avaliador } from "./avaliar";
+import { limparHtmlDetalhado, limparSlide } from "./sanitizar";
 import { novoId, metaVazia } from "./fabrica";
 import { normalizarSigla } from "./compilar";
 import type {
@@ -548,15 +549,31 @@ export function importarConteudo(bruto: unknown, meta?: Partial<Meta>, pasta?: s
   const v2 = bruto.formato === 2;
   const slidesBrutos = bruto.slides as unknown[];
 
-  const slides: Slide[] = [];
+  const lidos: Slide[] = [];
   slidesBrutos.forEach((s, i) => {
     if (!eObj(s)) {
       avisos.push(`Tela ${i + 1}: formato inesperado; ignorada.`);
       return;
     }
-    if (v2) slides.push(slideV2(s, i + 1, avisos));
-    else slides.push(...slideLegado(s, i + 1, avisos));
+    if (v2) lidos.push(slideV2(s, i + 1, avisos));
+    else lidos.push(...slideLegado(s, i + 1, avisos));
   });
+
+  // Campos ricos: só a marcação que o editor e o motor aceitam (ver sanitizar.ts).
+  let limpos = 0;
+  const limpar = (html: string) => {
+    const r = limparHtmlDetalhado(html);
+    if (r.removeu) limpos++;
+    return r.html;
+  };
+  const slides = lidos.map((s) => limparSlide(s, limpar));
+  if (limpos) {
+    avisos.push(
+      limpos === 1
+        ? "1 texto tinha formatação não permitida (por exemplo, imagem, script ou link inseguro). Ela foi removida e o texto foi mantido."
+        : `${limpos} textos tinham formatação não permitida (por exemplo, imagem, script ou link inseguro). Ela foi removida e o texto foi mantido.`,
+    );
+  }
 
   const contexto = str(bruto.contexto);
   const capa = slides.find((s) => s.tipo === "capa");

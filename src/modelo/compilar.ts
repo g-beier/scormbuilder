@@ -15,6 +15,7 @@ import type {
 } from "./tipos";
 import { PADRAO_REFLEXAO } from "./tipos";
 import { escaparHtml as esc } from "./texto";
+import { limparBloco, limparSlide } from "./sanitizar";
 
 /** Maiúsculas, sem acentos, só A-Z e 0-9. */
 export function normalizarSigla(texto: string): string {
@@ -68,7 +69,9 @@ function compilarCard(c: Card): Card {
  * simples inserido via innerHTML (escapados); `itens[].fb`, `msgAcerto` e
  * `msgRevisar` vão por textContent.
  */
-export function compilarBloco(b: Bloco): BlocoV2 {
+export function compilarBloco(bloco: Bloco): BlocoV2 {
+  // Defesa em profundidade: campos ricos passam pelo mesmo filtro da importação.
+  const b = limparBloco(bloco);
   switch (b.tipo) {
     case "texto":
       return { id: b.id, tipo: b.tipo, paras: [...b.paras] };
@@ -164,7 +167,9 @@ export function compilarBloco(b: Bloco): BlocoV2 {
   }
 }
 
-export function compilarSlide(s: Slide): SlideV2 {
+export function compilarSlide(slide: Slide): SlideV2 {
+  // Os blocos são limpos em compilarBloco; aqui, só os campos ricos da própria tela.
+  const s = slide.tipo === "conteudo" ? slide : limparSlide(slide);
   switch (s.tipo) {
     case "capa":
       return { id: s.id, tipo: s.tipo, kicker: esc(s.kicker), titulo: esc(s.titulo), sub: s.sub };

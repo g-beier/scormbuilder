@@ -15,10 +15,8 @@ export function normalizarUrl(bruto: string): string | null {
   return null;
 }
 
-/** Só http(s) e mailto viram link (vale para colagem e autolink). */
-export function urlPermitida(url: string): boolean {
-  return /^(https?:\/\/|mailto:)/i.test(url.trim());
-}
+/** Só http(s) e mailto viram link (vale para colagem e autolink; a mesma regra filtra importação e compilação). */
+export { urlPermitida } from "../modelo/sanitizar";
 
 /** Antes de colar: tira blocos (parágrafos, títulos, listas) e quebras, que o motor não aceita aqui. */
 export function limparColagemHtml(html: string): string {
