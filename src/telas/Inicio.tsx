@@ -13,6 +13,7 @@ import { editadoHa } from "../util/tempo";
 import { Dialogo } from "../editor/Dialogo";
 import { FormMeta, sugerirContexto } from "../editor/FormMeta";
 import { Icone } from "../editor/Icones";
+import { Atualizacao } from "./Atualizacao";
 
 export interface OpcoesAbrir {
   /** Projeto ainda sem rascunho em disco (novo ou importado): salvar já. */
@@ -23,7 +24,10 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
   const [rascunhos, setRascunhos] = useState<ResumoRascunho[] | null>(null);
   const [erroLista, setErroLista] = useState("");
   const [novoAberto, setNovoAberto] = useState(false);
-  const [ocupado, setOcupado] = useState(false);
+  const [ocupadoAcao, setOcupado] = useState(false);
+  // Durante a atualização nada de abrir projeto: o instalador pode fechar o app.
+  const [atualizando, setAtualizando] = useState(false);
+  const ocupado = ocupadoAcao || atualizando;
 
   const carregar = useCallback(async () => {
     if (!emTauri()) {
@@ -95,8 +99,9 @@ export function Inicio({ aoAbrir }: { aoAbrir(projeto: Projeto, opcoes?: OpcoesA
       </header>
 
       <main className="inicio-corpo">
+        <Atualizacao aoMudarOcupado={setAtualizando} />
         <section className="inicio-acoes" aria-label="Começar">
-          <button type="button" className="cartao-acao principal" onClick={() => setNovoAberto(true)}>
+          <button type="button" className="cartao-acao principal" onClick={() => setNovoAberto(true)} disabled={atualizando}>
             <Icone nome="mais" tamanho={28} />
             <span className="cartao-acao-nome">Novo SCORM</span>
             <span className="cartao-acao-desc">Comece do zero, com capa e tela de fim prontas.</span>

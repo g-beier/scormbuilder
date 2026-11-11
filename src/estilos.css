@@ -1605,3 +1605,60 @@ legend {
 .barra-suspend span.cheia {
   background: var(--perigo);
 }
+
+/* ---------- Atualização do app (tela Início) ---------- */
+
+.atualizacao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.atualizacao-status:empty {
+  display: none;
+}
+.atualizacao-aviso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--navy);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  color: var(--texto);
+}
+.atualizacao-aviso.erro {
+  border-left-color: var(--vermelho);
+}
+.atualizacao-aviso > .icone {
+  color: var(--navy);
+  flex: none;
+}
+.atualizacao-aviso.erro > .icone {
+  color: var(--vermelho);
+}
+.atualizacao-texto {
+  flex: 1 1 280px;
+}
+.atualizacao-botoes {
+  display: flex;
+  gap: 8px;
+}
+.atualizacao-progresso {
+  flex: 1 1 240px;
+  height: 12px;
+  accent-color: var(--navy);
+}
+.atualizacao-linha,
+.atualizacao-versao {
+  font-size: 0.9rem;
+  color: var(--texto-suave);
+}
+.atualizacao-versao {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}

@@ -38,7 +38,7 @@ O teste de ouro em `src/modelo/importar.test.ts` lê `~/Dev/ead-scorm/*_LEITURA2
 runtime/        motor que vai DENTRO de cada pacote: ES5, sem build, offline (index.html com {{TITULO}}, js/motor.js, js/scorm.js, css/tema.css, fonts/)
                 ORIGEM.md registra de qual commit do ead-scorm veio; test/ não vai para o pacote
 src/modelo/     TS puro: tipos do Projeto, fábrica, validar (mensagens pt-BR), compilar (Projeto → data.js v2), importar (data.js legado/v2 → Projeto), imagens (imagens usadas; img/ → data: na prévia)
-src/servicos/   wrappers de invoke() (rascunhos.ts, exportacao.ts, imagens.ts com cache das data: URLs) e autosave com debounce (autosave.ts)
+src/servicos/   wrappers de invoke() (rascunhos.ts, exportacao.ts, imagens.ts com cache das data: URLs), autosave com debounce (autosave.ts) e atualização do app (atualizacao.ts, plugin updater: oferecida só na tela Início, por telas/Atualizacao.tsx, salvando antes de instalar e de reiniciar)
 src/estado/, src/telas/, src/editor/, src/previa/   UI (store zustand+immer+zundo, Início, Editor, prévia)
 src/modelo/pdf.ts   PDF da leitura (M7): data.js v2 → documento Typst (texto sempre como string literal; sem gabarito; capa = cabeçalho; sem tela de fim; Confira no anexo)
 src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.json e arquivos .cevscorm), lib.rs (registro)
