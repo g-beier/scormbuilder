@@ -26,6 +26,8 @@ export function FormImagem({ bloco, editar, f }: PropsFormBloco<BlocoImagem>) {
   const projetoId = useProjeto((s) => s.projeto?.id);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Anúncio para leitor de tela (região sempre montada, para o anúncio não se perder)
+  const [anuncio, setAnuncio] = useState("");
   const [mini, setMini] = useState<Miniatura>({ estado: "carregando" });
   const [dimensoes, setDimensoes] = useState<{ nome: string; largura: number; altura: number } | null>(null);
   const arquivo = bloco.arquivo ?? "";
@@ -46,17 +48,23 @@ export function FormImagem({ bloco, editar, f }: PropsFormBloco<BlocoImagem>) {
   async function escolher() {
     if (ocupado) return;
     setErro(null);
+    setAnuncio("Abrindo…");
     setOcupado(true);
     try {
       const caminho = await escolherArquivoImagem();
-      if (!caminho) return;
-      if (!projetoId) throw new Error("Nenhum projeto aberto.");
+      if (!caminho) {
+        setAnuncio("");
+        return;
+      }
+      if (!projetoId) throw new Error("Abra um projeto antes de escolher a imagem.");
       const r = await importarImagem(projetoId, caminho);
       setDimensoes({ nome: r.nome, largura: r.largura, altura: r.altura });
       editar((b) => {
         b.arquivo = r.nome;
       });
+      setAnuncio(`Imagem escolhida. ${r.largura} × ${r.altura} px, ${tamanhoLegivel(r.bytes)}.`);
     } catch (e) {
+      setAnuncio("");
       setErro(mensagemDeErro(e));
     } finally {
       setOcupado(false);
@@ -87,10 +95,10 @@ export function FormImagem({ bloco, editar, f }: PropsFormBloco<BlocoImagem>) {
                   }}
                 />
               ) : (
-                <span className="ajuda">{mini.estado === "carregando" ? "Carregando a miniatura…" : "Não foi possível mostrar a miniatura."}</span>
+                <span className="ajuda">{mini.estado === "carregando" ? "Carregando a miniatura…" : "Não foi possível mostrar a miniatura. Use “Trocar imagem” para escolher o arquivo de novo."}</span>
               )}
             </div>
-            <p className="ajuda imagem-info" aria-live="polite">
+            <p className="ajuda imagem-info">
               {dim ? `${dim.largura} × ${dim.altura} px` : ""}
               {dim && mini.estado === "pronta" ? " · " : ""}
               {mini.estado === "pronta" ? tamanhoLegivel(bytesDaDataUrl(mini.url)) : ""}
@@ -113,25 +121,15 @@ export function FormImagem({ bloco, editar, f }: PropsFormBloco<BlocoImagem>) {
         <p id={idAjuda} className="ajuda">
           PNG, JPEG, WebP ou GIF, com até 2 MB. A imagem vai junto com o pacote.
         </p>
+        <p role="status" className="so-leitor">
+          {anuncio}
+        </p>
         {erro && (
           <p id={idErro} className="erro-campo" role="alert">
             {erro}
           </p>
         )}
       </div>
-      <CampoTexto
-        rotulo="Descrição da imagem (texto alternativo)"
-        ajuda={
-          decorativa
-            ? "Imagem decorativa: o leitor de tela não anuncia a imagem, então a descrição não é usada."
-            : `Diga em uma ou duas frases o que a imagem mostra, para quem usa leitor de tela. Não comece com “Imagem de”.${altLongo ? ` Está longa: prefira até ${ALT_LONGO} caracteres.` : ""}`
-        }
-        multilinha
-        desabilitado={decorativa}
-        valor={bloco.alt ?? ""}
-        foco={f("alt")}
-        aoMudar={(v) => editar((b) => void (b.alt = v), f("alt"))}
-      />
       <div className="campo campo-check campo-check-grande">
         <input
           id={`${id}-decorativa`}
@@ -143,9 +141,22 @@ export function FormImagem({ bloco, editar, f }: PropsFormBloco<BlocoImagem>) {
         />
         <label htmlFor={`${id}-decorativa`}>Imagem decorativa (não precisa de descrição)</label>
         <p id={`${id}-decorativa-ajuda`} className="ajuda">
-          Marque só se a imagem não acrescenta informação (um enfeite, uma textura).
+          Marque só se a imagem não traz informação, como um enfeite ou uma textura.
         </p>
       </div>
+      <CampoTexto
+        rotulo="Descrição da imagem (texto alternativo)"
+        ajuda={
+          decorativa
+            ? "Imagem decorativa: o leitor de tela ignora a imagem, então a descrição não é usada. O que você já escreveu fica guardado."
+            : `Diga em uma ou duas frases o que a imagem mostra, para quem usa leitor de tela. Não comece com “Imagem de”.${altLongo ? ` Está longa: prefira até ${ALT_LONGO} caracteres.` : ""}`
+        }
+        multilinha
+        desabilitado={decorativa}
+        valor={bloco.alt ?? ""}
+        foco={f("alt")}
+        aoMudar={(v) => editar((b) => void (b.alt = v), f("alt"))}
+      />
       <CampoRico
         rotulo="Legenda (opcional)"
         ajuda="Aparece abaixo da imagem. Use para a fonte ou um comentário curto."

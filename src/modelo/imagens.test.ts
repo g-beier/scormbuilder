@@ -48,10 +48,18 @@ describe("bloco imagem: fábrica e compilação", () => {
     expect(a).toMatchObject({ tipo: "imagem", arquivo: "", alt: "Mapa & <rio>", legenda: "Leg <em>x</em>", decorativa: false, extras: { src: `img/${A}` } });
     expect(b).toMatchObject({ arquivo: "", decorativa: true, extras: { src: `img/${B}` } });
     expect(avisos).toEqual([
-      `Tela 2, bloco 1: a imagem “img/${A}” não vem junto com o data.js. Escolha o arquivo de novo no bloco “Imagem”.`,
-      `Tela 2, bloco 2: a imagem “img/${B}” não vem junto com o data.js. Escolha o arquivo de novo no bloco “Imagem”.`,
+      `Tela 2, bloco 1: a imagem “${A}” não veio junto na importação. Escolha o arquivo de novo no bloco “Imagem”.`,
+      `Tela 2, bloco 2: a imagem “${B}” não veio junto na importação. Escolha o arquivo de novo no bloco “Imagem”.`,
     ]);
     expect(validar(p2).filter((x) => x.campo === "arquivo")).toHaveLength(2);
+  });
+
+  it("o aviso da importação mostra só o nome do arquivo (nunca o endereço técnico)", () => {
+    const js = (src: string) =>
+      `window.CONTEUDO = { formato: 2, id: "X_UD1_LEITURA1", slides: [{ id: "s1", tipo: "conteudo", titulo: "T", blocos: [{ id: "b1", tipo: "imagem", alt: "a", src: ${JSON.stringify(src)} }] }, { id: "s2", tipo: "fim", titulo: "F", texto: "" }] };`;
+    const aviso = (src: string) => importarDataJs(js(src)).avisos.find((a) => /imagem/.test(a));
+    expect(aviso("img/sub/mapa.png?v=2")).toBe("Tela 1, bloco 1: a imagem “mapa.png” não veio junto na importação. Escolha o arquivo de novo no bloco “Imagem”.");
+    expect(aviso("data:image/png;base64,AAAA")).toBe("Tela 1, bloco 1: a imagem não veio junto na importação. Escolha o arquivo de novo no bloco “Imagem”.");
   });
 });
 
@@ -64,7 +72,9 @@ describe("bloco imagem: validação", () => {
     expect(problemas(projeto({ alt: "x" }))).toEqual([
       "erro:arquivo:Tela 2: no bloco “Imagem”, falta escolher a imagem. Use “Escolher imagem…”.",
     ]);
-    expect(problemas(projeto({ arquivo: "../x.png", alt: "x" }))[0]).toMatch(/^erro:arquivo:.*escolha a imagem de novo/);
+    expect(problemas(projeto({ arquivo: "../x.png", alt: "x" }))).toEqual([
+      "erro:arquivo:Tela 2: no bloco “Imagem”, a imagem não foi encontrada. Use “Trocar imagem” e escolha o arquivo de novo.",
+    ]);
   });
 
   it("sem descrição: a corrigir, a menos que seja decorativa", () => {
@@ -125,7 +135,7 @@ describe("importar: <img> dentro do texto", () => {
     expect(avisos).toContain(
       "Tela 2: havia 2 imagens dentro do texto, que o editor não aceita; elas foram removidas. Para mostrar uma imagem, adicione um bloco “Imagem” e escolha o arquivo.",
     );
-    expect(avisos.some((a) => a.startsWith("2 textos tinham formatação não permitida"))).toBe(true);
+    expect(avisos.some((a) => a.startsWith("2 textos tinham elementos que o editor não aceita"))).toBe(true);
     expect(compilarDataJs(p)).not.toContain("imagensRemovidas");
   });
 });

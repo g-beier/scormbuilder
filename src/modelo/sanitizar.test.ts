@@ -76,7 +76,7 @@ describe("importação e compilação", () => {
     expect(quiz.perguntas[0].pergunta).toBe("P?");
     expect(quiz.perguntas[0].opcoes).toEqual(["a", "b"]);
     expect(quiz.perguntas[0].explica).toBe("<b>texto puro</b>"); // textContent no motor
-    expect(avisos.some((a) => /5 textos tinham formatação não permitida/.test(a))).toBe(true);
+    expect(avisos.some((a) => /5 textos tinham elementos que o editor não aceita/.test(a))).toBe(true);
   });
 
   it("o compilador filtra também o que entrar por outro caminho (rascunho editado à mão)", () => {

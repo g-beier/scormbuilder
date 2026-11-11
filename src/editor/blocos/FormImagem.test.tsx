@@ -60,7 +60,17 @@ describe("FormImagem", () => {
     expect(ref.atual.arquivo).toBe("0123456789abcdef.png");
     expect(url).toHaveBeenCalledWith("proj-1", "0123456789abcdef.png");
     expect(screen.getByRole("button", { name: "Trocar imagem" })).toBeTruthy();
-    expect(screen.getByText(/640 × 480 px/)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Imagem escolhida. 640 × 480 px, 2 KB.");
+  });
+
+  it("ordem dos campos: arquivo, decorativa, descrição, legenda", () => {
+    montar(novoBloco("imagem"));
+    const botao = screen.getByRole("button", { name: "Escolher imagem…" });
+    const caixa = screen.getByLabelText("Imagem decorativa (não precisa de descrição)");
+    const desc = screen.getByLabelText("Descrição da imagem (texto alternativo)");
+    const seguinte = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(seguinte(botao, caixa)).toBe(true);
+    expect(seguinte(caixa, desc)).toBe(true);
   });
 
   it("cancelar o diálogo não muda nada; erro do backend aparece perto do botão", async () => {
@@ -70,9 +80,10 @@ describe("FormImagem", () => {
     expect(importar).not.toHaveBeenCalled();
     expect(ref.atual.arquivo).toBe("");
     escolher.mockResolvedValueOnce("/x.svg");
-    importar.mockRejectedValueOnce("Imagens SVG não são aceitas, porque podem conter código. Exporte a imagem como PNG e tente de novo.");
+    importar.mockRejectedValueOnce("Este formato de imagem (SVG) não é aceito. Salve ou exporte a imagem como PNG ou JPEG e tente de novo.");
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Escolher imagem…" })));
-    expect(screen.getByRole("alert").textContent).toMatch(/SVG não são aceitas/);
+    expect(screen.getByRole("alert").textContent).toMatch(/\(SVG\) não é aceito/);
+    expect(screen.getByRole("status").textContent).toBe("");
     expect(screen.getByRole("button", { name: "Escolher imagem…" }).getAttribute("aria-describedby")).toContain(screen.getByRole("alert").id);
     expect(ref.atual.arquivo).toBe("");
   });
@@ -93,7 +104,7 @@ describe("FormImagem", () => {
     url.mockResolvedValue(null);
     montar({ ...novoBloco("imagem"), arquivo: "0123456789abcdef.png", alt: "x" });
     await act(async () => {});
-    expect(screen.getByText("Não foi possível mostrar a miniatura.")).toBeTruthy();
+    expect(screen.getByText("Não foi possível mostrar a miniatura. Use “Trocar imagem” para escolher o arquivo de novo.")).toBeTruthy();
   });
 
   it("tamanho a partir da data: URL", () => {

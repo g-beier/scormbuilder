@@ -164,7 +164,7 @@ describe.skipIf(pastas.length === 0)(`teste de ouro: ${pastas.length} pacotes LE
     const { projeto, avisos } = importarDataJs(fonte, undefined, pasta);
     expect(nomePacote(projeto.meta)).toBe(pasta);
     // O filtro de HTML não mexe em nada dos pacotes aprovados.
-    expect(avisos.filter((a) => /formatação não permitida/.test(a))).toEqual([]);
+    expect(avisos.filter((a) => /elementos que o editor não aceita/.test(a))).toEqual([]);
     const erros = validar(projeto).filter((p) => p.nivel === "erro");
     expect(erros.map((e) => e.mensagem)).toEqual([]);
 

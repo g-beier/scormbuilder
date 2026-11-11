@@ -339,7 +339,10 @@ function bloco(b: BlocoV2, ctx: Ctx): string {
         const desc = decorativa ? "" : `#nota[${txt(`[Imagem: ${b.alt?.trim() || "sem descrição"}]`)}]`;
         return [desc, legenda ? `#nota[${legenda}]` : ""].filter(Boolean).join("\n");
       }
-      const img = `imagem(${str(`img/${nome}`)}, ${decorativa ? "decorativa: true" : `alt: ${str((b.alt ?? "").replace(/\s+/g, " ").trim())}`})`;
+      // Informativa sem descrição: a figura continua na árvore de leitura (o autor disse que
+      // ela traz informação), mas nunca com alt vazio, que o PDF/UA-1 recusa numa figura.
+      const alt = (b.alt ?? "").replace(/\s+/g, " ").trim() || "Imagem sem descrição";
+      const img = `imagem(${str(`img/${nome}`)}, ${decorativa ? "decorativa: true" : `alt: ${str(alt)}`})`;
       // Decorativa: artefato, fora da árvore de leitura; a legenda (se houver) fica como texto
       if (decorativa) return [`#block(width: 100%, above: 1em, below: 1em, ${img})`, legenda ? `#align(center)[#nota[${legenda}]]` : ""].filter(Boolean).join("\n");
       return legenda ? `#figure(${img}, caption: [${legenda}])` : `#figure(${img})`;

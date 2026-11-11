@@ -42,6 +42,7 @@ const comImagens: ConteudoV2 = {
         { id: "b-3", tipo: "imagem", src: `img/${NOME_PNG}`, alt: "", decorativa: true },
         { id: "b-4", tipo: "imagem", src: `img/${NOME_PNG}`, alt: "", decorativa: true, legenda: "Só enfeite" },
         { id: "b-5", tipo: "imagem", src: "img/nao-existe.png", alt: "Mapa antigo" },
+        { id: "b-7", tipo: "imagem", src: `img/${NOME_RETRATO}`, alt: "  " },
         { id: "b-6", tipo: "texto", paras: ["Depois das imagens."] },
       ],
     },
@@ -110,6 +111,9 @@ describe("gerarTypst", () => {
     expect(t).not.toContain("nao-existe");
     expect(t).toContain(`#nota[#"[Imagem: Mapa antigo]"]`);
     expect(t).toContain("#let ALTURA_MAX = 9cm");
+    // Informativa sem descrição: figura com alt de reserva, nunca alt vazio (PDF/UA-1)
+    expect(t).toContain(`#figure(imagem("img/${NOME_RETRATO}", alt: "Imagem sem descrição"))`);
+    expect(t).not.toMatch(/alt: ""/);
   });
 
   // Gera os .typ para o teste Rust `pdf::testes::compila_fixtures` (PDF_SAIDA=pasta npx vitest run src/modelo/pdf.test.ts)

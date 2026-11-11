@@ -545,7 +545,7 @@ export function validar(projeto: Projeto): Problema[] {
       }
       case "imagem": {
         if (vazioSimples(b.arquivo)) erro("arquivo", "falta escolher a imagem. Use “Escolher imagem…”.");
-        else if (!RE_NOME_IMAGEM.test(b.arquivo)) erro("arquivo", "o arquivo da imagem não é reconhecido. Use “Trocar imagem” e escolha a imagem de novo.");
+        else if (!RE_NOME_IMAGEM.test(b.arquivo)) erro("arquivo", "a imagem não foi encontrada. Use “Trocar imagem” e escolha o arquivo de novo.");
         if (b.decorativa === true) break;
         if (vazioSimples(b.alt)) erro("alt", "descreva a imagem para quem usa leitor de tela, ou marque como decorativa.");
         else if (b.alt.trim().length > ALT_LONGO) {

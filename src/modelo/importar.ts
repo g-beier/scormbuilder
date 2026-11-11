@@ -456,16 +456,26 @@ function blocoV2(o: Obj, av: string[], onde: string): Bloco | null {
       // (a validação cobra) e o endereço original fica guardado em extras.
       const decorativa = l.bOpc("decorativa");
       b = { id, tipo, arquivo: "", alt: l.s("alt"), legenda: l.s("legenda"), decorativa: decorativa === true };
-      const src = o.src;
+      const nomeArq = nomeDoArquivoDaImagem(o.src);
       av.push(
-        typeof src === "string" && src
-          ? `${onde}: a imagem “${src}” não vem junto com o data.js. Escolha o arquivo de novo no bloco “Imagem”.`
-          : `${onde}: o bloco “Imagem” veio sem arquivo. Escolha a imagem no bloco “Imagem”.`,
+        nomeArq
+          ? `${onde}: a imagem “${nomeArq}” não veio junto na importação. Escolha o arquivo de novo no bloco “Imagem”.`
+          : typeof o.src === "string" && o.src
+            ? `${onde}: a imagem não veio junto na importação. Escolha o arquivo de novo no bloco “Imagem”.`
+            : `${onde}: o bloco “Imagem” veio sem arquivo. Escolha a imagem no bloco “Imagem”.`,
       );
       break;
     }
   }
   return comExtras(b, l.fim(["id", "tipo", ...CAMPOS_BLOCO[tipo]]));
+}
+
+/** Só o nome do arquivo de um `src` (sem `img/`, pasta, `?` ou `#`); vazio para `data:` ou sem nome. */
+function nomeDoArquivoDaImagem(src: unknown): string {
+  if (typeof src !== "string" || /^data:/i.test(src.trim())) return "";
+  const caminho = src.trim().split(/[?#]/)[0];
+  const nome = caminho.slice(Math.max(caminho.lastIndexOf("/"), caminho.lastIndexOf("\\")) + 1);
+  return nome.length <= 120 ? nome : "";
 }
 
 function slideV2(o: Obj, n: number, av: string[]): Slide {
@@ -601,8 +611,8 @@ export function importarConteudo(bruto: unknown, meta?: Partial<Meta>, pasta?: s
   if (limpos) {
     avisos.push(
       limpos === 1
-        ? "1 texto tinha formatação não permitida (por exemplo, imagem, script ou link inseguro). Ela foi removida e o texto foi mantido."
-        : `${limpos} textos tinham formatação não permitida (por exemplo, imagem, script ou link inseguro). Ela foi removida e o texto foi mantido.`,
+        ? "1 texto tinha elementos que o editor não aceita (por exemplo, imagem ou link inseguro). Eles foram removidos e o texto foi mantido."
+        : `${limpos} textos tinham elementos que o editor não aceita (por exemplo, imagem ou link inseguro). Eles foram removidos e os textos foram mantidos.`,
     );
   }
 
