@@ -7,7 +7,11 @@ Aplicativo desktop para **montar pacotes SCORM 1.2** de leituras e atividades do
 Os instaladores ficam em [Releases](https://github.com/g-beier/scormbuilder/releases).
 
 - **Mac:** baixe o `.dmg` do seu processador (Apple Silicon = `aarch64`, Intel = `x64`) e arraste o app para Aplicativos. O app ainda não é assinado pela Apple: na primeira vez, abra com **clique direito → Abrir**, ou vá em **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**.
-- **Windows:** baixe o `.msi` ou o `-setup.exe`. Se o SmartScreen avisar, clique em **Mais informações → Executar assim mesmo**.
+- **Windows:** baixe o `.msi` (recomendado: é o formato que a atualização automática usa) ou o `-setup.exe`. Se o SmartScreen avisar, clique em **Mais informações → Executar assim mesmo**.
+
+### Atualização automática
+
+O app avisa quando há uma versão nova. Ao abrir a tela inicial, ele confere em silêncio (sem internet, nada acontece) e, se houver novidade, mostra **"Nova versão X disponível"** com **Atualizar agora** e **Agora não**. A atualização só é oferecida na tela inicial, com os rascunhos já salvos: depois do download, clique em **Reiniciar para concluir** (no Windows o instalador fecha e reabre o app sozinho). Para conferir na hora, use **Procurar atualizações**, no alto da tela inicial.
 
 ## O que a versão 0.1.0 faz
 
@@ -38,7 +42,18 @@ Detalhes de arquitetura, formato do `data.js` e convenções do projeto: [`CLAUD
 
 1. Atualize a versão em `package.json`, `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`.
 2. Crie e envie a tag: `git tag v0.1.1 && git push origin v0.1.1`.
-3. O GitHub Actions (`.github/workflows/release.yml`) gera os instaladores de Mac e Windows num **rascunho** de Release. Confira e publique.
+3. O GitHub Actions (`.github/workflows/release.yml`) gera os instaladores de Mac e Windows num **rascunho** de Release, com os arquivos da atualização automática (`.app.tar.gz`, `.sig` e um único `latest.json` com `darwin-aarch64`, `darwin-x86_64` e `windows-x86_64`). O job "conferir-latest-json" falha se faltar alguma plataforma.
+4. Confira e **publique** o rascunho. Só um release publicado (e não marcado como pré-lançamento) vale como `releases/latest`: enquanto for rascunho, os apps instalados não veem a versão nova.
+
+**Chave da atualização.** Os pacotes de atualização são assinados com a chave do Tauri (independe da assinatura de código da Apple/Microsoft). A chave privada fica em `~/.tauri/scormbuilder.key` no Mac de quem lança as versões, a senha no Porta-chaves do macOS (item "scormbuilder-tauri-updater-key"), e as duas estão nos segredos do repositório (`TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). A chave pública está em `plugins.updater.pubkey` do `src-tauri/tauri.conf.json`. Guarde uma cópia de segurança da chave e da senha: **se a chave se perder, os apps já instalados não aceitam mais atualizações** e cada pessoa terá de baixar e instalar a versão nova à mão.
+
+Para gerar os `.sig` localmente (teste):
+
+```bash
+TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/scormbuilder.key" \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s scormbuilder-tauri-updater-key -w)" \
+npm run tauri build -- --bundles app
+```
 
 ## Fontes e licenças
 

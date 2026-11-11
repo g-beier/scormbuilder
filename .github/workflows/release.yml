@@ -1,5 +1,12 @@
 # Gera os instaladores (Mac Apple Silicon, Mac Intel e Windows) a cada tag v*
 # e anexa a um rascunho de Release no GitHub. Publique o rascunho depois de conferir.
+#
+# Atualização automática: com bundle.createUpdaterArtifacts, o `tauri build` assina
+# os pacotes de atualização (.app.tar.gz no Mac, .msi no Windows) com a chave
+# TAURI_SIGNING_PRIVATE_KEY (+ senha) e gera os .sig. O tauri-action sobe os .sig e
+# monta um único latest.json no release: cada job da matriz baixa o latest.json que
+# já estiver lá e acrescenta a sua plataforma (darwin-aarch64, darwin-x86_64,
+# windows-x86_64). O app só enxerga o latest.json depois que o release é publicado.
 name: Release
 
 on:
@@ -51,6 +58,8 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "SCORM Builder ${{ github.ref_name }}"
@@ -62,3 +71,29 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          # latest.json para o updater (padrão já é true; explícito para não sumir sem aviso).
+          includeUpdaterJson: true
+          # No Windows a atualização usa o .msi (o mesmo instalador recomendado no README).
+          updaterJsonPreferNsis: false
+
+  # Os 3 jobs gravam o mesmo latest.json (lê, acrescenta a plataforma, sobe de novo).
+  # Se dois terminarem juntos, uma plataforma pode se perder: aqui isso vira erro visível.
+  conferir-latest-json:
+    needs: instaladores
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: latest.json tem as 3 plataformas, com assinatura
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          url=$(gh api "repos/${{ github.repository }}/releases?per_page=30" \
+            --jq '.[] | select(.tag_name == env.TAG) | .assets[] | select(.name == "latest.json") | .url' | head -n1)
+          if [ -z "$url" ]; then echo "::error::latest.json não foi anexado ao release $TAG"; exit 1; fi
+          gh api -H "Accept: application/octet-stream" "$url" > latest.json
+          cat latest.json
+          for p in darwin-aarch64 darwin-x86_64 windows-x86_64; do
+            jq -e --arg p "$p" '.platforms[$p].url and (.platforms[$p].signature | length > 0)' latest.json > /dev/null \
+              || { echo "::error::latest.json sem a plataforma $p (rode de novo o job dela)"; exit 1; }
+          done
