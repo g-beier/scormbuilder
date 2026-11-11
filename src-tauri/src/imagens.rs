@@ -105,7 +105,7 @@ pub fn detectar_tipo(bytes: &[u8]) -> Result<TipoImagem, String> {
     }
     if parece_svg(bytes) {
         return Err(
-            "Imagens SVG não são aceitas, porque podem conter código. Exporte a imagem como PNG e tente de novo."
+            "Este formato de imagem (SVG) não é aceito. Salve ou exporte a imagem como PNG ou JPEG e tente de novo."
                 .to_string(),
         );
     }
@@ -131,7 +131,7 @@ pub fn tamanho_legivel(bytes: u64) -> String {
 
 fn erro_grande(bytes: u64) -> String {
     format!(
-        "A imagem tem {}, acima do limite de 2 MB. Reduza o tamanho (ou a resolução) e tente de novo.",
+        "A imagem tem {}, acima do limite de 2 MB. Reduza o tamanho, por exemplo salvando em JPEG ou diminuindo a resolução, e tente de novo.",
         tamanho_legivel(bytes)
     )
 }
@@ -149,7 +149,7 @@ pub fn analisar(bytes: &[u8]) -> Result<(TipoImagem, u32, u32), String> {
         return Err(erro_grande(bytes.len() as u64));
     }
     let tipo = detectar_tipo(bytes)?;
-    let corrompida = || "A imagem parece corrompida: não foi possível ler as dimensões.".to_string();
+    let corrompida = || "Não foi possível abrir esta imagem; o arquivo parece estar danificado. Tente outra.".to_string();
     let dim = imagesize::blob_size(bytes).map_err(|_| corrompida())?;
     let (l, a) = (u32::try_from(dim.width), u32::try_from(dim.height));
     match (l, a) {
@@ -175,7 +175,12 @@ fn erro_io(acao: &str, e: &io::Error) -> String {
         io::ErrorKind::PermissionDenied => {
             format!("Não foi possível {acao}: sem permissão para acessar o local.")
         }
-        _ => format!("Não foi possível {acao}: {e}."),
+        _ => {
+            // O texto do sistema (em inglês, técnico) fica só no log
+            eprintln!("[imagens] não foi possível {acao}: {e}");
+            let outro = if acao == "ler a imagem" { " ou escolha outro arquivo" } else { "" };
+            format!("Não foi possível {acao}. Tente novamente{outro}.")
+        }
     }
 }
 
@@ -418,14 +423,17 @@ pub(crate) mod testes {
         let t = PastaTemp::nova();
         let base = t.0.join("dados");
         let svg = escrever(&t, "x.svg", b"<?xml version=\"1.0\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>");
-        assert!(importar_imagem_em(&base, "p1", &svg).unwrap_err().contains("SVG"));
+        assert_eq!(
+            importar_imagem_em(&base, "p1", &svg).unwrap_err(),
+            "Este formato de imagem (SVG) não é aceito. Salve ou exporte a imagem como PNG ou JPEG e tente de novo."
+        );
         let svg_png = escrever(&t, "y.png", b"  <svg></svg>");
         assert!(importar_imagem_em(&base, "p1", &svg_png).unwrap_err().contains("SVG"));
         let texto = escrever(&t, "falsa.png", b"isto e um texto, nao uma imagem");
         assert!(importar_imagem_em(&base, "p1", &texto).unwrap_err().contains("não é uma imagem aceita"));
         // Assinatura PNG sem IHDR: dimensões ilegíveis.
         let quebrada = escrever(&t, "q.png", b"\x89PNG\r\n\x1a\n");
-        assert!(importar_imagem_em(&base, "p1", &quebrada).unwrap_err().contains("corrompida"));
+        assert!(importar_imagem_em(&base, "p1", &quebrada).unwrap_err().contains("parece estar danificado"));
         assert!(importar_imagem_em(&base, "p1", &t.0.join("nada.png")).unwrap_err().contains("não foi encontrado"));
         assert!(importar_imagem_em(&base, "p1", &t.0).unwrap_err().contains("não é um arquivo"));
         assert!(!base.join("rascunhos/p1/img").exists() || fs::read_dir(base.join("rascunhos/p1/img")).unwrap().next().is_none());
@@ -438,7 +446,7 @@ pub(crate) mod testes {
         grande.resize((LIMITE_IMAGEM + 400 * 1024) as usize, 0);
         let c = escrever(&t, "g.png", &grande);
         let erro = importar_imagem_em(&t.0, "p1", &c).unwrap_err();
-        assert!(erro.contains("2,4 MB") && erro.contains("limite de 2 MB"), "{erro}");
+        assert!(erro.contains("2,4 MB") && erro.contains("limite de 2 MB") && erro.contains("salvando em JPEG"), "{erro}");
         // No limite exato, aceita.
         grande.truncate(LIMITE_IMAGEM as usize);
         let c = escrever(&t, "g2.png", &grande);
