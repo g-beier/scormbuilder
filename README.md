@@ -30,6 +30,8 @@ cd src-tauri && cargo test && cargo clippy -- -D warnings
 npm run tauri build    # instalador local
 ```
 
+O CI (`.github/workflows/ci.yml`) roda a cada push em `main`/`feat/**` e em PRs para `main`: testes e build do front com a verificação de segurança no navegador, `cargo clippy` e `cargo test`, e os testes do motor que usam só as fixtures de `runtime/test/`.
+
 Detalhes de arquitetura, formato do `data.js` e convenções do projeto: [`CLAUDE.md`](CLAUDE.md). Origem e mudanças do motor do pacote: [`runtime/ORIGEM.md`](runtime/ORIGEM.md).
 
 ### Lançar uma versão
