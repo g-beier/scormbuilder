@@ -37,11 +37,12 @@ O teste de ouro em `src/modelo/importar.test.ts` lê `~/Dev/ead-scorm/*_LEITURA2
 ```
 runtime/        motor que vai DENTRO de cada pacote: ES5, sem build, offline (index.html com {{TITULO}}, js/motor.js, js/scorm.js, css/tema.css, fonts/)
                 ORIGEM.md registra de qual commit do ead-scorm veio; test/ não vai para o pacote
-src/modelo/     TS puro: tipos do Projeto, fábrica, validar (mensagens pt-BR), compilar (Projeto → data.js v2), importar (data.js legado/v2 → Projeto)
-src/servicos/   wrappers de invoke() (rascunhos.ts) e autosave com debounce (autosave.ts)
+src/modelo/     TS puro: tipos do Projeto, fábrica, validar (mensagens pt-BR), compilar (Projeto → data.js v2), importar (data.js legado/v2 → Projeto), imagens (imagens usadas; img/ → data: na prévia)
+src/servicos/   wrappers de invoke() (rascunhos.ts, exportacao.ts, imagens.ts com cache das data: URLs) e autosave com debounce (autosave.ts)
 src/estado/, src/telas/, src/editor/, src/previa/   UI (store zustand+immer+zundo, Início, Editor, prévia)
 src/modelo/pdf.ts   PDF da leitura (M7): data.js v2 → documento Typst (texto sempre como string literal; sem gabarito; capa = cabeçalho; sem tela de fim; Confira no anexo)
 src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.json e arquivos .cevscorm), lib.rs (registro)
+                imagens.rs (imagens do rascunho em <app_data>/rascunhos/<id>/img/<16 hex>.<ext>), exportar.rs, pdf.rs
 ```
 
 - Todo acesso a disco é feito por comandos Rust (`std::fs`). O webview não tem permissão `fs`, só `dialog` (open/save/confirm). A lógica Rust fica em funções `*_em(base: &Path, …)` testáveis. Os comandos só resolvem `app_data_dir`.
@@ -51,9 +52,11 @@ src-tauri/src/  projetos.rs (rascunhos atômicos em <app_data>/rascunhos/<id>.js
 
 O projeto (`src/modelo/tipos.ts`) é `{ formato: "cev-scorm-builder", versao: 1, id (uuid), meta: { curso, ud, atividade, numero, titulo, contexto }, slides, criadoEm, atualizadoEm, extras? }`. Slides e blocos têm ids curtos estáveis (`s-xxxxxxxx`, `b-xxxxxxxx`). Campos desconhecidos vindos de importação ficam em `extras` e nunca são descartados, mas também não vão para o pacote. `compilarDataJs` é determinístico. O nome do pacote vem de `nomePacote(meta)` = `CURSO_UD<n>_<ATIVIDADE><n>`, que também é o `CONTEUDO.id` e a chave de storage.
 
+Imagens (M9): o bloco `imagem` do projeto guarda `arquivo` (nome em `img/` do rascunho, dado por `importar_imagem`), `alt`, `legenda` e `decorativa`; o compilador gera `src: "img/<arquivo>"` (decorativa sai com `alt: ""`). A prévia troca `img/<arquivo>` pelo `data:` lido com `ler_imagem` e só recarrega o iframe quando as imagens estão prontas. Imagens sem uso são apagadas (`limpar_imagens_orfas`) só ao fechar o projeto, protegendo as do histórico de desfazer/refazer (`limparImagensSemUso` em `src/estado/projeto.ts`). A importação de `data.js` não traz arquivos: o bloco volta sem imagem (a corrigir) e `<img>` dentro de HTML sai, guardado em `extras.imagensRemovidas` da tela, com aviso.
+
 ### PDF da leitura (M7)
 
-O formato "PDF da leitura" do Exportar grava `<pacote>.pdf` direto, sem diálogo de impressão: `gerarTypst` (front) produz o documento e `src-tauri/src/pdf.rs` compila com o Typst (crates `typst`, `typst-pdf`, `typst-layout`), com as fontes Poppins/Krona One de `src-tauri/fonts/` embutidas e as do `typst-assets` como reserva. O PDF sai marcado e validado como PDF/UA-1; se algum símbolo do conteúdo não tiver glifo, sai marcado sem o selo UA. Bloco novo precisa de um `case` em `gerarTypst` (versão para preencher, sem respostas).
+O formato "PDF da leitura" do Exportar grava `<pacote>.pdf` direto, sem diálogo de impressão: `gerarTypst` (front) produz o documento e `src-tauri/src/pdf.rs` compila com o Typst (crates `typst`, `typst-pdf`, `typst-layout`), com as fontes Poppins/Krona One de `src-tauri/fonts/` embutidas e as do `typst-assets` como reserva. O PDF sai marcado e validado como PDF/UA-1; se algum símbolo do conteúdo não tiver glifo, sai marcado sem o selo UA. Bloco novo precisa de um `case` em `gerarTypst` (versão para preencher, sem respostas). Imagens: `figure(imagem("img/<arquivo>", alt: …), caption: …)`, até a largura do texto e 9 cm de altura; decorativa vira `pdf.artifact`. O `World` do `pdf.rs` só lê `img/<nome>` (nome validado por `imagens::validar_nome_imagem`) da pasta do rascunho de `projetoId`; no `compila_fixtures`, de `<PDF_SAIDA>/img/`.
 
 ## Agentes (`.claude/agents/`)
 
@@ -137,7 +140,7 @@ Não mudar cores, fontes ou formas do visual aprovado pelo cliente (Poppins/Kron
 ## Vocabulário da interface (decidido com o usuário)
 
 - No editor, um campo mal preenchido é **"a corrigir"** (ex.: "4 a corrigir", "11 a corrigir · 1 aviso"). Não use "pendência" para isso: no pacote, "pendência" é o que o aluno ainda não fez.
-- Nomes dos blocos na interface: Texto (`texto`), Lista, Cartões, Ordenar passos, Linha do tempo, Perguntas (`quiz`), Comparação (`contraste`), Destaque, Confira, Fonte / referência (`fonte`). Os valores de `tipo` no `data.js` não mudam.
+- Nomes dos blocos na interface: Texto (`texto`), Lista, Cartões, Ordenar passos, Linha do tempo, Perguntas (`quiz`), Comparação (`contraste`), Destaque, Confira, Fonte / referência (`fonte`), Imagem (`imagem`). Os valores de `tipo` no `data.js` não mudam.
 - A interface nunca mostra nomes de campo do `data.js` (`kicker`, `paras`, `html`).
 
 ## Cuidados de conteúdo
