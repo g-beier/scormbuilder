@@ -1,7 +1,9 @@
 /**
- * Mock da API SCORM 1.2 para a prévia. Fica no `window` do app (pai do iframe),
- * onde o `runtime/js/scorm.js` procura `window.API`. Os dados ficam em memória,
- * separados por chave de prévia ("previa-<id do projeto>").
+ * Mock da API SCORM 1.2 para a prévia ("o Moodle simulado"). Fica no app (pai do
+ * iframe); o iframe isolado não o alcança. A `public/previa/ponte.js`, dentro do
+ * iframe, expõe um `window.API` com cache local e repassa cada chamada por
+ * `postMessage` (ver ponteScorm.ts). Os dados ficam em memória, separados por
+ * chave de prévia ("previa-<id do projeto>").
  *
  * Cada carga do iframe recebe uma sessão nova (`novaSessao`). Reiniciar o
  * progresso revoga as sessões abertas: a gravação que o documento antigo faz no
@@ -74,7 +76,28 @@ function contarInteracoes(d: Dados): number {
   return max + 1;
 }
 
+/**
+ * Respostas fixas do LMS simulado a `LMSGetValue` (dependem só dos dados gravados).
+ * A ponte do iframe recebe uma cópia para responder sem esperar o app.
+ */
+export function valoresFixos(d: Dados): Record<string, string> {
+  return {
+    "cmi.core._children":
+      "student_id,student_name,lesson_location,credit,lesson_status,entry,score,total_time,lesson_mode,exit,session_time",
+    "cmi.interactions._children": "id,objectives,time,type,correct_responses,weighting,student_response,result,latency",
+    "cmi.core.student_id": "previa",
+    "cmi.core.student_name": "Prévia, Autor",
+    "cmi.core.credit": "credit",
+    "cmi.core.lesson_mode": "normal",
+    "cmi.core.entry": d["cmi.suspend_data"] ? "resume" : "ab-initio",
+    "cmi.core.total_time": "0000:00:00",
+    "cmi.launch_data": "",
+  };
+}
+
 export interface MockScorm {
+  /** O que a ponte do iframe precisa para responder às leituras do motor. */
+  leituraInicial(chave: string): { dados: Dados; fixos: Record<string, string> };
   /** Cria uma sessão (objeto `API`) para uma carga do iframe, gravando em `chave`. */
   novaSessao(chave: string): ApiScorm12;
   /** Apaga os dados de `chave` e revoga as sessões abertas nela. */
@@ -157,28 +180,9 @@ export function criarMockScorm(agora: () => number = Date.now): MockScorm {
         if (revogada()) return (falha("101"), "");
         const d = dadosDe(chave);
         if (SO_ESCRITA.has(el) || RE_INTERACAO.test(el)) return (falha("404"), "");
-        switch (el) {
-          case "cmi.core._children":
-            return (ok(), "student_id,student_name,lesson_location,credit,lesson_status,entry,score,total_time,lesson_mode,exit,session_time");
-          case "cmi.interactions._children":
-            return (ok(), "id,objectives,time,type,correct_responses,weighting,student_response,result,latency");
-          case "cmi.interactions._count":
-            return (ok(), String(contarInteracoes(d)));
-          case "cmi.core.student_id":
-            return (ok(), "previa");
-          case "cmi.core.student_name":
-            return (ok(), "Prévia, Autor");
-          case "cmi.core.credit":
-            return (ok(), "credit");
-          case "cmi.core.lesson_mode":
-            return (ok(), "normal");
-          case "cmi.core.entry":
-            return (ok(), d["cmi.suspend_data"] ? "resume" : "ab-initio");
-          case "cmi.core.total_time":
-            return (ok(), "0000:00:00");
-          case "cmi.launch_data":
-            return (ok(), "");
-        }
+        if (el === "cmi.interactions._count") return (ok(), String(contarInteracoes(d)));
+        const fixos = valoresFixos(d);
+        if (Object.prototype.hasOwnProperty.call(fixos, el)) return (ok(), fixos[el]);
         if (!/^cmi\./.test(el)) return (falha("201"), "");
         ok();
         return d[el] ?? "";
@@ -222,6 +226,11 @@ export function criarMockScorm(agora: () => number = Date.now): MockScorm {
 
   return {
     novaSessao,
+    leituraInicial(chave) {
+      const d = { ...(store.get(chave) ?? {}) };
+      if (!d["cmi.core.lesson_status"]) d["cmi.core.lesson_status"] = "not attempted";
+      return { dados: d, fixos: valoresFixos(d) };
+    },
     reiniciar(chave) {
       geracao.set(chave, (geracao.get(chave) ?? 0) + 1);
       store.delete(chave);
@@ -245,10 +254,3 @@ export function criarMockScorm(agora: () => number = Date.now): MockScorm {
 
 /** Instância única do app (a prévia é uma só). */
 export const mockScorm = criarMockScorm();
-
-/** Publica uma sessão nova como `window.API` do documento do app. */
-export function publicarApi(chave: string, alvo: Window = window): ApiScorm12 {
-  const api = mockScorm.novaSessao(chave);
-  (alvo as Window & { API?: ApiScorm12 }).API = api;
-  return api;
-}

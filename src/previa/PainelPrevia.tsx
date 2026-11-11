@@ -1,14 +1,18 @@
 /**
- * Prévia ao vivo: o motor real (`runtime/`, servido em /runtime/) num iframe `srcdoc`,
- * com o CONTEUDO compilado inline e o mock da API SCORM 1.2 no `window` do app.
+ * Prévia ao vivo: o motor real (`runtime/`, servido em /runtime/) num iframe `srcdoc`
+ * isolado (`sandbox` sem `allow-same-origin`), com o CONTEUDO compilado inline.
+ * O LMS simulado fica no app e conversa com o iframe só por `postMessage`
+ * (ver montarSrcdoc.ts, ponteScorm.ts e public/previa/ponte.js).
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import modeloIndex from "../../runtime/index.html?raw";
 import { compilarConteudo } from "../modelo/compilar";
 import type { Projeto } from "../modelo/tipos";
 import { Icone } from "../editor/Icones";
-import { LIMITE_SUSPEND_DATA, mockScorm, publicarApi } from "./apiScorm";
-import { HANDLE_GLOBAL, montarSrcdoc } from "./montarSrcdoc";
+import { LIMITE_SUSPEND_DATA, mockScorm } from "./apiScorm";
+import { montarSrcdoc } from "./montarSrcdoc";
+import { criarPonteScorm, lerMensagem, pedidoIr } from "./ponteScorm";
+import { CSS_PREVIA } from "./recursos";
 
 export interface PropsPainelPrevia {
   projeto: Projeto;
@@ -19,13 +23,11 @@ export interface PropsPainelPrevia {
   aoAlternar(): void;
 }
 
-/** O que `Motor.iniciar` devolve (ver CLAUDE.md, "Runtime v2"). */
-interface HandleMotor {
-  ir(i: number): void;
-  tela(): number;
-  total: number;
-  concluido(): boolean;
-}
+/** Ponte única do app com o iframe da prévia (sessões do LMS simulado). */
+const ponte = criarPonteScorm(mockScorm);
+
+/** Sem resposta do motor depois de carregar o iframe: a prévia não abriu. */
+const ESPERA_MOTOR_MS = 3000;
 
 const DISPOSITIVOS = {
   computador: { rotulo: "Computador", largura: 1200 },
@@ -50,6 +52,10 @@ function urlRuntime(): string {
   return new URL("/runtime/", window.location.href).href;
 }
 
+function urlPonte(): string {
+  return new URL("/previa/ponte.js", window.location.href).href;
+}
+
 export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido, aoAlternar }: PropsPainelPrevia) {
   const id = useId();
   const chave = "previa-" + projeto.id;
@@ -71,6 +77,14 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
   /** Tela pedida pelo editor que ainda não pôde ser mostrada. */
   const pendenteId = useRef<string | null>(slideSelecionadoId);
   const contador = useRef(0);
+  /** Sessão da carga atual do iframe; mensagens de outras cargas não mudam o estado da tela. */
+  const sessaoAtual = useRef<string | null>(null);
+  /** Tela mostrada agora pelo motor (null = ainda não abriu). */
+  const telaAtual = useRef<number | null>(null);
+  /** Pedido "ir" em andamento: número e id da tela pedida. */
+  const pedidoAtual = useRef<{ n: number; id: string } | null>(null);
+  const pedidos = useRef(0);
+  const esperaMotor = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---------- Conteúdo, com debounce ----------
   const entrada = useMemo(
@@ -84,14 +98,51 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
     return () => clearTimeout(t);
   }, [entrada, entradaEstavel]);
 
-  const handle = useCallback((): HandleMotor | null => {
-    const w = iframeRef.current?.contentWindow as (Window & { [HANDLE_GLOBAL]?: HandleMotor | null }) | null;
-    try {
-      return w?.[HANDLE_GLOBAL] ?? null;
-    } catch {
-      return null;
-    }
+  const pararEspera = useCallback(() => {
+    if (esperaMotor.current) clearTimeout(esperaMotor.current);
+    esperaMotor.current = null;
   }, []);
+
+  // ---------- Mensagens do iframe ----------
+  useEffect(() => {
+    const receber = (e: MessageEvent) => {
+      // Só o iframe da prévia; a origem é opaca ("null"), então vale a identidade da janela.
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
+      const m = lerMensagem(e.data);
+      if (!m) return;
+      if (m.tipo === "scorm") {
+        ponte.repassar(m);
+        return;
+      }
+      if (m.sessao !== sessaoAtual.current) return;
+      switch (m.tipo) {
+        case "pronto":
+          pararEspera();
+          telaAtual.current = m.tela;
+          setFalha(null);
+          break;
+        case "falha":
+          pararEspera();
+          telaAtual.current = null;
+          setFalha(m.mensagem || "O motor não conseguiu abrir a atividade.");
+          break;
+        case "tela": {
+          telaAtual.current = m.tela;
+          const pedido = pedidoAtual.current;
+          if (m.pedido === undefined || !pedido || m.pedido !== pedido.n) break;
+          pedidoAtual.current = null;
+          if (idsCarregados.current[m.tela] !== pedido.id) {
+            // Modo aluno bloqueou o salto: recarrega já na tela pedida.
+            pendenteId.current = pedido.id;
+            setRecargas((n) => n + 1);
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener("message", receber);
+    return () => window.removeEventListener("message", receber);
+  }, [pararEspera]);
 
   // ---------- Monta e (re)carrega o iframe ----------
   useEffect(() => {
@@ -100,65 +151,77 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
 
     // Tela a manter: a pedida pelo editor, senão a que está na prévia agora (pelo id da tela).
     let tela = 0;
-    const h = handle();
-    const atualId = h ? idsCarregados.current[h.tela()] : undefined;
+    const atual = telaAtual.current;
+    const atualId = atual !== null ? idsCarregados.current[atual] : undefined;
     const alvoId = pendenteId.current ?? atualId;
     pendenteId.current = null;
     if (alvoId && ids.includes(alvoId)) tela = ids.indexOf(alvoId);
-    else if (h) tela = Math.min(h.tela(), Math.max(0, ids.length - 1));
+    else if (atual !== null) tela = Math.min(atual, Math.max(0, ids.length - 1));
 
+    const { sessao, estado } = ponte.abrirSessao(chave);
     let html: string;
     try {
-      html = montarSrcdoc(modeloIndex, { base: urlRuntime(), titulo, conteudo, chave, telaInicial: tela, livre });
+      html = montarSrcdoc(modeloIndex, {
+        base: urlRuntime(),
+        ponte: urlPonte(),
+        css: CSS_PREVIA,
+        titulo,
+        conteudo,
+        chave,
+        telaInicial: tela,
+        livre,
+        sessao,
+        scorm: estado,
+      });
     } catch (e) {
       setFalha(String((e as Error).message ?? e));
       return;
     }
-    publicarApi(chave);
     mockScorm.observar(chave);
+    sessaoAtual.current = sessao;
+    telaAtual.current = null;
+    pedidoAtual.current = null;
     idsCarregados.current = ids;
     contador.current += 1;
     // O comentário com o contador garante que o iframe recarrega mesmo com o mesmo conteúdo.
     setSrcdoc(`${html}<!-- carga ${contador.current} -->`);
-  }, [entradaEstavel, livre, chave, recargas, handle]);
+  }, [entradaEstavel, livre, chave, recargas]);
 
   useEffect(
     () => () => {
-      delete (window as Window & { API?: unknown }).API;
+      pararEspera();
+      sessaoAtual.current = null;
       mockScorm.observar(null);
     },
-    [],
+    [pararEspera],
   );
 
   function aoCarregar() {
-    const doc = iframeRef.current?.contentDocument;
-    const h = handle();
-    if (doc && !h) {
-      const msg = doc.querySelector("#stage p")?.textContent?.trim();
-      setFalha(msg || "O motor não conseguiu abrir a atividade.");
-      return;
-    }
-    setFalha(null);
+    // O "pronto" (ou "falha") da ponte chega por mensagem; sem nada, a prévia não abriu.
+    if (telaAtual.current !== null || !srcdoc) return;
+    pararEspera();
+    const sessao = sessaoAtual.current;
+    esperaMotor.current = setTimeout(() => {
+      if (sessaoAtual.current === sessao && telaAtual.current === null) setFalha("O motor não conseguiu abrir a atividade.");
+    }, ESPERA_MOTOR_MS);
   }
 
   // ---------- Ao selecionar uma tela no editor, salta para ela ----------
   useEffect(() => {
     if (!slideSelecionadoId) return;
-    const h = handle();
     const i = idsCarregados.current.indexOf(slideSelecionadoId);
-    if (!h || i < 0) {
+    const janela = iframeRef.current?.contentWindow;
+    if (telaAtual.current === null || i < 0 || !janela) {
       // Ainda não carregou (ou a tela é nova): vale para a próxima carga.
       pendenteId.current = slideSelecionadoId;
       return;
     }
-    if (h.tela() === i) return;
-    h.ir(i);
-    if (h.tela() !== i) {
-      // Modo aluno bloqueou o salto: recarrega já na tela pedida.
-      pendenteId.current = slideSelecionadoId;
-      setRecargas((n) => n + 1);
-    }
-  }, [slideSelecionadoId, selecaoN, handle]);
+    if (telaAtual.current === i) return;
+    pedidos.current += 1;
+    pedidoAtual.current = { n: pedidos.current, id: slideSelecionadoId };
+    // Origem opaca: o destino só pode ser "*"; o pedido não leva nada sigiloso.
+    janela.postMessage(pedidoIr(i, pedidos.current), "*");
+  }, [slideSelecionadoId, selecaoN]);
 
   // ---------- Escala para caber no palco ----------
   const { largura } = DISPOSITIVOS[dispositivo];
@@ -204,12 +267,8 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
   }
 
   function reiniciarProgresso() {
+    // O iframe isolado não tem localStorage: todo o progresso está no LMS simulado.
     mockScorm.reiniciar(chave);
-    try {
-      localStorage.removeItem(chave);
-    } catch {
-      /* sem storage: nada a limpar */
-    }
     setRecargas((n) => n + 1);
   }
 
@@ -305,6 +364,7 @@ export function PainelPrevia({ projeto, slideSelecionadoId, selecaoN, recolhido,
             >
               <iframe
                 ref={iframeRef}
+                sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                 title={`Prévia da atividade${n >= 0 ? `, tela ${n + 1} selecionada` : ""} (${DISPOSITIVOS[dispositivo].rotulo.toLowerCase()})`}
                 srcDoc={srcdoc}
                 onLoad={aoCarregar}
